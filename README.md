@@ -5,6 +5,12 @@ Functions that provide AWS functionality for the following DMPTool projects:
 - Apollo Server in [dmsp_backend_prototype](https://github.com/CDLUC3/dmsp_backend_prototype)
 - Narrative Generator Service in [dmptool-narrative-generator](https://github.com/CDLUC3/dmptool-narrative-generator)
 
+## Installation
+
+Add the DMP Utils types to your `package.json` by running `npm add @dmptool/utils`
+
+See below for usage examples of each utility.
+
 ## Table of Contents
 - [AWS CloudFormation Stack Output Access](#cloudformation-support)
 - [AWS DynamoDB Table Access](#dynamodb-support)
@@ -15,6 +21,20 @@ Functions that provide AWS functionality for the following DMPTool projects:
 - [AWS RDS MySQL Database Access](#rds-mysql-support)
 - [S3 Bucket Access](#s3-support)
 - [SSM Parameter Store Access](#ssm-support)
+
+## Development
+
+This package is written in TypeScript and uses [Jest](https://jestjs.io/) for testing. Each utility has its own test file.
+
+To add a new utility, create a new file in the `src` directory and add it to the `index.ts` file. Be sure to add a corresponding unit test file in the `__tests__` directory.
+
+This package is published to DMP under the DMP Tool organization. 
+
+We use [semantic versioning](https://semver.org/) for versioning. If your changes are backwards compatible, then you can bump the patch version. If you make backwards-incompatible changes, then you can bump the minor version. If you make breaking changes, then you should bump the major version.
+
+To publish a new version, update the version in the `package.json` file and run `npm publish`. Be sure to notify the owners of the repositories listed at the top of this file about your changes.
+
+### Dependencies
 
 This package has the following dependencies:
 - [@dmptool-types](https://github.com/CDLUC3/dmptool-types) For TypeScript types and Zod schemas to help with maDMP serialization/deserialization.
