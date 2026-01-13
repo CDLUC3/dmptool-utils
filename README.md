@@ -9,11 +9,11 @@ Functions that provide AWS functionality for the following DMPTool projects:
 - [AWS CloudFormation Stack Output Access](#cloudformation-support)
 - [AWS DynamoDB Table Access](#dynamodb-support)
 - [General Helper Functions](#general-helper-functions)
+- [EventBridge Event Publication](#eventbridge-support)
 - [Logger Support (Pino with ECS formatting)](#logger-support-pino-with-ecs-formatting)
 - [maDMP Support (serialization and deserialization)](#madmp-support-serialization-and-deserialization)
 - [AWS RDS MySQL Database Access](#rds-mysql-support)
 - [S3 Bucket Access](#s3-support)
-- [SNS Topic Publication](#sns-support)
 - [SSM Parameter Store Access](#ssm-support)
 
 This package has the following dependencies:
@@ -181,6 +181,43 @@ if (exists) {
       }
     }
   }
+}
+```
+## EventBridge Support
+
+This code can be used to publish events to the EventBridge.
+
+Environment variable requirements:
+- `AWS_REGION` - The AWS region where the Lambda Function is running
+- `EVENTBRIDGE_BUS_NAME` - The ARN of the EventBridge Bus to publish events to
+
+### Example usage
+```typescript
+import { publishMessage } from '@dmptool/utils';
+
+process.env.AWS_REGION = 'us-west-2';
+
+const topicArn = 'arn:aws:sns:us-east-1:123456789012:my-topic';
+
+// See the documentation for the AWS Lambda you are trying to invoke to determine what the
+// `detail-type` and `detail` payload should look like.
+const message = {
+  'detail-type': 'my-event',  
+  detail: {
+    property1: 'value1',
+    property2: 'value2'
+  }
+}
+
+const response = await publishMessage(
+  message,
+  topicArn
+);
+
+if (response.statusCode === 200) {
+  console.log('Message published successfully', response.body);
+} else {
+  console.log('Error publishing message', response.body);
 }
 ```
 
@@ -700,43 +737,6 @@ if (response) {
   console.log('Presigned URL to put a new the Object into the bucket', putURL);
 } else {
   console.log('Failed to upload object');
-}
-```
-
-## SNS Messaging Support
-
-This code can be used to publish messages to an SNS topic.
-
-Environment variable requirements:
-- `AWS_REGION` - The AWS region where the Lambda Function is running
-
-### Example usage
-```typescript
-import { publishMessage } from '@dmptool/utils';
-
-process.env.AWS_REGION = 'us-west-2';
-
-const topicArn = 'arn:aws:sns:us-east-1:123456789012:my-topic';
-
-// See the documentation for the AWS Lambda you are trying to invoke to determine what the
-// `detail-type` and `detail` payload should look like.
-const message = {
-  'detail-type': 'my-event',  
-  detail: {
-    property1: 'value1',
-    property2: 'value2'
-  }
-}
-
-const response = await publishMessage(
-  message,
-  topicArn
-);
-
-if (response.statusCode === 200) {
-  console.log('Message published successfully', response.body);
-} else {
-  console.log('Error publishing message', response.body);
 }
 ```
 

@@ -7,7 +7,7 @@ jest.mock('@aws-sdk/client-cloudformation', () => ({
   ListExportsCommand: jest.fn(),
 }));
 
-import { getExport } from "../cloudformation";
+import { getExport } from "../cloudFormation";
 
 beforeEach(() => {
   jest.resetAllMocks();
