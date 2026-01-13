@@ -1,0 +1,15 @@
+echo "Running ESLint scans..."
+npm run lint
+
+echo "Running Tests ..."
+npm test
+
+echo "Ensuring build compiles ..."
+npm run build
+
+echo "Running Trivy scans..."
+
+# Run Trivy to check for vulnerabilities in the filesystem
+npm run trivy-high
+
+echo "Trivy scans passed. Continuing with commit."

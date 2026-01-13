@@ -1,0 +1,12 @@
+
+#Ignore the test coverage directory (automatically generated during testing)
+coverage
+
+# Ignore the build directory (automatically generated during build)
+dist
+
+# Ignore the dependency directory
+node_modules
+
+# Ignore WebStorm IDE file
+.idea
