@@ -478,7 +478,9 @@ export const updateDMP = async (
 
     const lastModified = new Date(latest.dmp?.modified).getTime();
     const now = Date.now();
-    const gracePeriod = process.env.VERSION_GRACE_PERIOD ? Number(process.env.VERSION_GRACE_PERIOD) : 7200000;
+    const gracePeriod = process.env.VERSION_GRACE_PERIOD
+      ? Number(process.env.VERSION_GRACE_PERIOD)
+      : 7200000; // 2 hours in milliseconds
 
     // We need to version the DMP if the provenance doesn't match or the modified
     // timestamp is older than 2 hours ago
