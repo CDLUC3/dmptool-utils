@@ -1,6 +1,6 @@
-# dmptool-aws
+# dmptool-utils
 
-Functions that provide AWS functionality for the following DMPTool projects:
+Functions that provide helper functions for the following DMPTool projects:
 - Lambda Functions in [dmptool-infrastructure](https://github.com/CDLUC3/dmptool-infrastructure)
 - Apollo Server in [dmsp_backend_prototype](https://github.com/CDLUC3/dmsp_backend_prototype)
 - Narrative Generator Service in [dmptool-narrative-generator](https://github.com/CDLUC3/dmptool-narrative-generator)
@@ -66,7 +66,7 @@ Environment variable requirements:
 
 ### Example usage
 ```typescript
-import { getExport } from '@dmptool/dmptool-utils';
+import { getExport } from '@dmptool/utils';
 
 const tableName = await getExport('DynamoTableNames');
 console.log(tableName);
@@ -114,7 +114,7 @@ import {
   getDMPVersions,
   tombstoneDMP,
   updateDMP
-} from 'dmptool-dynamo';
+} from '@dmptool/utils';
 
 process.env.AWS_REGION = 'eu-west-1';
 process.env.DOMAIN_NAME = 'my-application.org';
@@ -265,7 +265,7 @@ import {
   normaliseHttpProtocol,
   randomHex,
   removeNullAndUndefinedFromObject,
-} from "dmptool-general";
+} from "@dmptool/utils";
 
 console.log(areEqual("foo", "foo")); // Returns true
 console.log(areEqual(123, "123")); // Returns false
