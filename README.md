@@ -32,7 +32,7 @@ This package is published to DMP under the DMP Tool organization.
 
 We use [semantic versioning](https://semver.org/) for versioning. If your changes are backwards compatible, then you can bump the patch version. If you make backwards-incompatible changes, then you can bump the minor version. If you make breaking changes, then you should bump the major version.
 
-To publish a new version, update the version in the `package.json` file and run `npm publish`. Be sure to notify the owners of the repositories listed at the top of this file about your changes.
+To publish a new version, update the version in the `package.json` file, then run `npm login` and `npm publish`. Be sure to notify the owners of the repositories listed at the top of this file about your changes.
 
 ### Dependencies
 
