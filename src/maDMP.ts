@@ -436,26 +436,26 @@ const loadDatasetInfo = async (
  * Builds the RDA Common Standard Related Identifier entries for the DMP
  *
  * @param rdsConnectionParams the connection parameters for the MySQL database
- * @param projectId the Project ID to fetch the Related Works information for
+ * @param planId the Plan ID to fetch the Related Works information for
  * @returns the RDA Common Standard Related Identifier entries for the DMP
  */
 const loadRelatedWorksInfo = async (
   rdsConnectionParams: ConnectionParams,
-  projectId: number
+  planId: number
 ): Promise<RDACommonStandardRelatedWork[] | []> => {
   const sql = `
     SELECT w.doi AS identifier, LOWER(wv.workType) AS workType
     FROM relatedWorks rw
       JOIN workVersions wv ON rw.workVersionId = wv.id
         JOIN works w ON wv.workId = w.id
-    WHERE rw.projectId = ?;
+    WHERE rw.planId = ?;
   `;
 
-  rdsConnectionParams.logger.debug({ projectId, sql }, 'Fetching related works information');
+  rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching related works information');
   const resp = await queryTable(
     rdsConnectionParams,
     sql,
-    [projectId.toString()]
+    [planId.toString()]
   );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     const works = resp.results.filter((row) => !isNullOrUndefined(row));
@@ -1260,7 +1260,7 @@ export async function planToDMPCommonStandard(
   const funding: LoadFundingInfo | undefined = fundings.length > 0 ? fundings[0] : undefined;
   const works: RDACommonStandardRelatedWork[] | [] = await loadRelatedWorksInfo(
     rdsConnectionParams,
-    plan.projectId
+    plan.id
   );
   const defaultRole: string | undefined = await loadDefaultMemberRole(rdsConnectionParams);
 
