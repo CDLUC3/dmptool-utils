@@ -512,9 +512,20 @@ const loadNarrativeTemplateInfo = async (
     results = resp.results.filter((row) => !isNullOrUndefined(row));
   }
 
-  if (!Array.isArray(results) || results.length === 0) {
+  if (!Array.isArray(results) || results.length === 0
+    || !Array.isArray(results[0].section) || results[0].section.length === 0) {
     return undefined;
   }
+
+  rdsConnectionParams.logger.debug(
+    {
+      planId,
+      nbrRsults: results.length,
+      sectionCount: results?.[0]?.section?.length,
+      questionCount: results?.[0]?.section?.[0]?.question?.length
+    },
+    'Loaded narrative information'
+  )
 
   // Sort the questions by display order
   results[0].section.forEach((section: LoadNarrativeSectionInfo) => {
@@ -531,12 +542,30 @@ const loadNarrativeTemplateInfo = async (
     description: results[0].templateDescription,
     version: results[0].templateVersion,
     section: results[0].section.map((section: LoadNarrativeSectionInfo) => {
+
+      rdsConnectionParams.logger.debug(
+        {
+          sectionId: section.sectionId,
+          questionCount: section.question.length
+        },
+        'Loaded narrative section information'
+      )
+
       return {
         id: section.sectionId,
         title: section.sectionTitle,
         description: section.sectionDescription,
         order: section.sectionOrder,
         question: section.question.map((question: LoadNarrativeQuestionInfo) => {
+
+          rdsConnectionParams.logger.debug(
+            {
+              questionId: question.questionId,
+              answerId: question.answerId
+            },
+            'Loaded narrative question information'
+          )
+
           return {
             id: question.questionId,
             order: question.questionOrder,
@@ -1070,6 +1099,7 @@ export const validateRDACommonStandard = (
   if (validationErrors.length > 0) {
     const msg = `Invalid RDA Common Standard: ${validationErrors.join('; ')}`;
     logger.warn({ dmpId: dmp?.dmp?.dmp_id?.identifier }, msg);
+    logger.warn({ dmp: dmp?.dmp }, 'Full DMP');
     throw new DMPValidationError(msg);
   }
 
@@ -1103,6 +1133,7 @@ export const validateDMPToolExtensions = (
   if (validationErrors.length > 0) {
     const msg = `Invalid DMP Tool extensions: ${validationErrors.join('; ')}`;
     logger.warn({ dmpId }, msg);
+    logger.warn({ dmp }, 'Full DMP Tool extensions');
     throw new DMPValidationError(msg);
   }
 
