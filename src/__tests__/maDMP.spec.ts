@@ -18,13 +18,23 @@ import {
 // Mock external dependencies
 jest.mock('../rds');
 
+import pino, { Logger } from 'pino';
 import { queryTable } from "../rds";
-import { convertMySQLDateTimeToRFC3339 } from "../general";
+import { convertMySQLDateTimeToRFC3339, EnvironmentEnum } from "../general";
 
-process.env.ENV = 'tst';
-process.env.APPLICATION_NAME = 'test';
-process.env.DOMAIN_NAME = 'example.com';
-process.env.DOI_BASE_URL = 'https://doi.org';
+const mockLogger: Logger = pino({ level: 'silent' });
+
+const mockConfig = {
+  logger: mockLogger,
+  host: 'localhost',
+  port: 3306,
+  user: 'test',
+  password: 'test',
+  database: 'testdb'
+}
+const mockEnv = EnvironmentEnum.DEV;
+const mockApplication = 'test-app';
+const mockDomain = 'example.com';
 
 describe('planToDMPCommonStandard', () => {
   beforeEach(() => {
@@ -35,7 +45,7 @@ describe('planToDMPCommonStandard', () => {
 
   const mockRegisteredPlanInfo: LoadPlanInfo = {
     id: 123,
-    dmpId: `${process.env.DOI_BASE_URL}/11.22222/12345`,
+    dmpId: `https://doi.org/11.22222/12345`,
     projectId: 12,
     versionedTemplateId: 1,
     createdById: 4,
@@ -53,7 +63,7 @@ describe('planToDMPCommonStandard', () => {
 
   const mockUnregisteredPlanInfo: LoadPlanInfo = {
     id: 123,
-    dmpId: `${process.env.DOI_BASE_URL}/11.22222/67890`,
+    dmpId: `https://doi.org/11.22222/67890`,
     projectId: 12,
     versionedTemplateId: 1,
     createdById: 4,
@@ -471,13 +481,13 @@ describe('planToDMPCommonStandard', () => {
           project: [{
             title: mockProjectMinimumInfo.title,
             project_id: [{
-              identifier: `${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockRegisteredPlanInfo.id}`,
+              identifier: `${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockRegisteredPlanInfo.id}`,
               type: 'other'
             }]
           }],
           dataset: [{
             dataset_id: {
-              identifier: `${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockRegisteredPlanInfo.id}.outputs.1`,
+              identifier: `${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockRegisteredPlanInfo.id}.outputs.1`,
               type: 'other'
             },
             personal_data: 'unknown',
@@ -486,7 +496,7 @@ describe('planToDMPCommonStandard', () => {
             type: 'dataset'
           }],
           rda_schema_version: "1.2",
-          provenance: process.env.APPLICATION_NAME,
+          provenance: mockApplication,
           privacy: mockRegisteredPlanInfo.visibility.toLowerCase(),
           status: mockRegisteredPlanInfo.status.toLowerCase(),
           featured: mockRegisteredPlanInfo.featured ? 'yes' : 'no',
@@ -494,7 +504,13 @@ describe('planToDMPCommonStandard', () => {
         }
       };
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
       expect(result).toEqual(expected);
     });
 
@@ -510,10 +526,16 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result: DMPToolDMPType | undefined = await planToDMPCommonStandard(123);
+      const result: DMPToolDMPType | undefined = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
       expect(result).toBeDefined();
       expect(result?.dmp?.dmp_id).toEqual({
-        identifier: `https://${process.env.DOMAIN_NAME}/projects/${mockProjectMinimumInfo.id}/dmp/${mockUnregisteredPlanInfo.id}`,
+        identifier: `https://${mockDomain}/projects/${mockProjectMinimumInfo.id}/dmp/${mockUnregisteredPlanInfo.id}`,
         type: 'url'
       });
       expect(result?.dmp?.registered).toBeUndefined();
@@ -532,7 +554,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [defaultMemberRole]})
         .mockResolvedValueOnce({results: [mockCompleteNarrative]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
       expect(result).toBeDefined();
       expect(result?.dmp?.narrative).toBeDefined();
 
@@ -568,7 +596,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       expect(result?.dmp?.contributor).toBeDefined();
@@ -587,7 +621,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       expect(result?.dmp.project).toBeDefined();
@@ -610,12 +650,18 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       expect(result?.dmp?.project?.[0].funding).toBeDefined();
       expect(result?.dmp?.project?.[0].funding).toHaveLength(1);
-      expect(result?.dmp?.project?.[0].funding?.[0].funder_id.identifier).toEqual(`${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.fundings.${mockMinimalPlanFunding.id}`);
+      expect(result?.dmp?.project?.[0].funding?.[0].funder_id.identifier).toEqual(`${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.fundings.${mockMinimalPlanFunding.id}`);
       expect(result?.dmp?.project?.[0].funding?.[0].funder_id.type).toEqual('other');
       expect(result?.dmp?.project?.[0].funding?.[0].funding_status).toEqual('planned');
     });
@@ -632,7 +678,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       expect(result?.dmp?.project?.[0].funding).toBeDefined();
@@ -647,7 +699,7 @@ describe('planToDMPCommonStandard', () => {
       });
       expect(result?.dmp?.funding_project).toEqual([{
         project_id: {
-          identifier: `${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}`,
+          identifier: `${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}`,
           type: 'other'
         },
         funder_id: {
@@ -661,7 +713,7 @@ describe('planToDMPCommonStandard', () => {
       }]);
       expect(result?.dmp?.funding_opportunity).toEqual([{
         project_id: {
-          identifier: `${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}`,
+          identifier: `${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}`,
           type: 'other'
         },
         funder_id: {
@@ -687,7 +739,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       // Verify their info as the Contact
@@ -711,7 +769,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       // Verify their info as the Contact
@@ -729,7 +793,7 @@ describe('planToDMPCommonStandard', () => {
       expect(contributor).toBeDefined();
       expect(contributor?.name).toEqual([primaryContact.givenName, primaryContact.surName].join(' '));
       expect(contributor?.role).toEqual(JSON.parse(primaryContact.roles));
-      expect(contributor?.contributor_id[0].identifier).toEqual(`${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.members.${primaryContact.id}`);
+      expect(contributor?.contributor_id[0].identifier).toEqual(`${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.members.${primaryContact.id}`);
       expect(contributor?.contributor_id[0].type).toEqual('other');
       expect(contributor?.affiliation[0].name).toEqual(primaryContact.name);
       expect(contributor?.affiliation[0].affiliation_id.identifier).toEqual(primaryContact.uri);
@@ -748,7 +812,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: mockRelatedWorks})
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       expect(result?.dmp?.related_identifier).toBeDefined();
@@ -775,7 +845,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(456);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        456
+      );
 
       expect(result).toBeDefined();
       // Since the research outputs table has no data flags the status of
@@ -786,7 +862,7 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp.dataset).toHaveLength(1);
       expect(result?.dmp?.dataset[0].title).toEqual('My software');
       expect(result?.dmp?.dataset[0].type).toEqual('software');
-      expect(result?.dmp?.dataset[0].dataset_id.identifier).toEqual(`${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.outputs.1`);
+      expect(result?.dmp?.dataset[0].dataset_id.identifier).toEqual(`${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.outputs.1`);
       expect(result?.dmp?.dataset[0].personal_data).toEqual('unknown');
       expect(result?.dmp?.dataset[0].sensitive_data).toEqual('unknown');
       expect(result?.dmp?.dataset[0].language).toEqual('por');
@@ -806,7 +882,13 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
-      const result = await planToDMPCommonStandard(123);
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
 
       expect(result).toBeDefined();
       // Expect the ethical issues exist to be `yes` because the datasets flag
@@ -818,7 +900,7 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp.dataset[0].title).toEqual('My dataset');
       expect(result?.dmp.dataset[0].description).toEqual('A description of the dataset');
       expect(result?.dmp.dataset[0].type).toEqual('dataset');
-      expect(result?.dmp.dataset[0].dataset_id.identifier).toEqual(`${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.outputs.1`);
+      expect(result?.dmp.dataset[0].dataset_id.identifier).toEqual(`${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.outputs.1`);
       expect(result?.dmp.dataset[0].dataset_id.type).toEqual('other');
       expect(result?.dmp.dataset[0].personal_data).toEqual('no');
       expect(result?.dmp.dataset[0].sensitive_data).toEqual('yes');
@@ -862,7 +944,7 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp.dataset[1].title).toEqual('My software');
       expect(result?.dmp.dataset[1].description).toEqual('Software to process the dataset');
       expect(result?.dmp.dataset[1].type).toEqual('software');
-      expect(result?.dmp.dataset[1].dataset_id.identifier).toEqual(`${process.env.APPLICATION_NAME}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.outputs.2`);
+      expect(result?.dmp.dataset[1].dataset_id.identifier).toEqual(`${mockApplication}.projects.${mockProjectMinimumInfo.id}.dmp.${mockUnregisteredPlanInfo.id}.outputs.2`);
       expect(result?.dmp.dataset[1].dataset_id.type).toEqual('other');
       expect(result?.dmp.dataset[1].personal_data).toEqual('no');
       expect(result?.dmp.dataset[1].sensitive_data).toEqual('no');

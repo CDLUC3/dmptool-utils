@@ -4,31 +4,31 @@ import { ecsFormat } from '@elastic/ecs-pino-format';
 import { Writable } from "node:stream";
 
 // The available log levels
-export enum LogLevel {
-  trace = 'trace',
-  debug = 'debug',
-  info = 'info',
-  warn = 'warn',
-  error = 'error',
-  fatal = 'fatal',
+export enum LogLevelEnum {
+  TRACE = 'trace',
+  DEBUG = 'debug',
+  INFO = 'info',
+  WARN = 'warn',
+  ERROR = 'error',
+  FATAL = 'fatal',
 }
 
 /**
  * Initialize a Pino logger with ECS formatting for the Lambda function.
  *
  * @param lambdaName Name of the function, used as the module name in the logs
- * @param logLevel Log level to use, defaults to 'info'
+ * @param logLevel Log level to use, defaults to 'LogLevelEnum.INFO'
  * @returns A Pino logger instance
  */
 export const initializeLogger = (
   lambdaName: string,
-  logLevel: LogLevel
+  logLevel: LogLevelEnum = LogLevelEnum.INFO
 ): Logger => {
   const destination: Writable = pinoLambdaDestination();
   const logger: Logger = pino(
     {
       // Set the minimum log level
-      level: logLevel || 'info',
+      level: logLevel || LogLevelEnum.INFO,
       // Format the log for OpenSearch using Elastic Common Schema
       ...ecsFormat
     },

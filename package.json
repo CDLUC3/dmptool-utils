@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "1.0.1",
+  "version": "1.0.6",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,7 +32,7 @@
     "trivy-med": "./scripts/trivy-med.sh"
   },
   "dependencies": {
-    "@dmptool/types": "2.3.0",
+    "@dmptool/types": "2.3.2",
     "@elastic/ecs-pino-format": "^1.5.0",
     "date-fns": "^4.1.0",
     "jsonschema": "^1.5.0",
@@ -51,6 +51,7 @@
     "@aws-sdk/util-dynamodb": "^3.966.0"
   },
   "devDependencies": {
+    "@aws-sdk/util-stream-node": "^3.370.0",
     "@eslint/js": "^9.26.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^20.4.3",

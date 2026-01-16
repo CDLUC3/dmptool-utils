@@ -764,21 +764,20 @@ if (response) {
 
 This code provides a simple `getSSMParameter` function which can be used to fetch an SSM Parameter.
 
-Environment variable requirements:
-- `AWS_REGION` - The AWS region where the Lambda Function is running
-- `NODE_ENV` - The environment the Lambda Function is running in (e.g. `production`, `staging` or `development`)
-
 The code will use that value to construct the appropriate prefix for the key. For example if you are running in the AWS development environment it will use `/uc3/dmp/tool/dev/` as the prefix.
 
 ### Example usage
 ```typescript
-import { getSSMParameter } from '@dmptool/utils';
+import { logger, EnvironmentEnum, getSSMParameter, LogLevelEnum } from '@dmptool/utils';
 
 process.env.AWS_REGION = 'us-west-2';
 
+// Initialize the logger
+const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
+
 const paramName = 'RdsDatabase';
 
-const response = await getSSMParameter(paramName);
+const response = await getSSMParameter(logger, paramName, EnvironmentEnum.DEV);
 
 if (response) {
   console.log('SSM Parameter fetched successfully', response);

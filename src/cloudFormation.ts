@@ -1,3 +1,5 @@
+import { Logger } from 'pino';
+import { toErrorMessage } from './general';
 import {
   CloudFormationClient,
   ListExportsCommand,
@@ -47,16 +49,26 @@ const loadExports = async (): Promise<void> => {
 /**
  * Fetch the value for the specified CloudFormation stack export.
  *
+ * @param logger The logger to use for logging.
  * @param name The name of the CloudFormation stack export to fetch.
  * @returns The value of the CloudFormation stack export, or undefined if the
  * export could not be found.
+ * @throws Error if there was an error fetching the export.
  */
 export const getExport = async (
+  logger: Logger,
   name: string
 ): Promise<string | undefined> => {
-  await loadExports();
-  const response: any = cfExports.find((exp: any) => {
-    return exp?.Name.toLowerCase().trim() === name.toLowerCase().trim();
-  });
-  return response ? response.Value : undefined;
+  try {
+    logger.debug({ name }, 'Fetching CloudFormation export');
+    await loadExports();
+    const response: any = cfExports.find((exp: any) => {
+      return exp?.Name.toLowerCase().trim() === name.toLowerCase().trim();
+    });
+    return response ? response.Value : undefined;
+  } catch (error) {
+    const errMsg: string = toErrorMessage(error);
+    logger.fatal({ name, error: errMsg }, 'Error fetching CloudFormation export');
+    throw new Error(errMsg);
+  }
 }

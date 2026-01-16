@@ -1,7 +1,9 @@
 import { Validator } from 'jsonschema';
-import { queryTable } from './rds';
+import { Logger } from 'pino';
+import {ConnectionParams, queryTable} from './rds';
 import {
   convertMySQLDateTimeToRFC3339,
+  EnvironmentEnum,
   isNullOrUndefined,
   normaliseHttpProtocol,
   removeNullAndUndefinedFromObject,
@@ -50,10 +52,6 @@ const ROR_REGEX = /^https?:\/\/ror\.org\/[0-9a-zA-Z]+$/;
 
 const DOI_REGEX = /^(https?:\/\/)?(doi\.org\/)?(doi:)?(10\.\d{4,9}\/[-._;()/:\w]+)$/;
 
-const ORCID_BASE_URL: string = process.env.ENV && ['stg', 'prd'].includes(process.env.ENV)
-  ? 'https://orcid.org/'
-  : 'https://sandbox.orcid.org/';
-
 const ORCID_REGEX = /^(https?:\/\/)?(www\.|pub\.)?(sandbox\.)?(orcid\.org\/)?([0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X])$/;
 
 class DMPValidationError extends Error {
@@ -69,16 +67,20 @@ class DMPValidationError extends Error {
  * @param orcidIn the ORCID to check
  * @returns the ORCID in the correct format or null if it is not in the correct format
  */
-function formatORCID(orcidIn: string): string | null {
+function formatORCID(env: EnvironmentEnum, orcidIn: string): string | null {
   // If it is blank or already in the correct format, return it
   if (orcidIn && (orcidIn.match(ORCID_REGEX) && orcidIn.startsWith('http'))) {
     return normaliseHttpProtocol(orcidIn);
   }
 
+  const baseURL: string = env && ['stg', 'prd'].includes(env)
+    ? 'https://orcid.org/'
+    : 'https://sandbox.orcid.org/';
+
   // If it matches the ORCID format but didn't start with http then its just the id
   if (orcidIn && orcidIn.match(ORCID_REGEX)) {
     return normaliseHttpProtocol(
-      `${ORCID_BASE_URL}${orcidIn.split('/').pop()}`
+      `${baseURL}${orcidIn.split('/').pop()}`
     );
   }
 
@@ -145,22 +147,35 @@ function convertFiveCharToThreeChar(language: string): string {
 /**
  * Function to generate the base of an internal ID namespace
  *
+ * @param applicationName the name of the application/service
  * @param projectId the Project ID to use for the internal ID namespace
  * @param planId the Plan ID to use for the internal ID namespace
  * @returns the base of the internal ID namespace
  */
-function internalIdBase(projectId: number, planId: number): string {
-  return `${process.env.APPLICATION_NAME}.projects.${projectId}.dmp.${planId}`
+function internalIdBase(
+  applicationName: string,
+  projectId: number,
+  planId: number
+): string {
+  return `${applicationName}.projects.${projectId}.dmp.${planId}`
 }
 
 /**
  * Fetch the default MemberRole from the MySQL database
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @returns the default MemberRole as a string (or undefined if there is no default)
  */
-const loadDefaultMemberRole = async (): Promise<string | undefined> => {
+const loadDefaultMemberRole = async (
+  rdsConnectionParams: ConnectionParams
+): Promise<string | undefined> => {
   const sql = 'SELECT * FROM memberRoles WHERE isDefault = 1';
-  const resp = await queryTable(sql, []);
+  rdsConnectionParams.logger.debug({ sql }, 'Fetching default role');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    []
+  );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     return resp.results[0].id;
   }
@@ -171,11 +186,13 @@ const loadDefaultMemberRole = async (): Promise<string | undefined> => {
  * Fetches the Plan information needed to construct the DMP Common Standard from
  * the MySQL database
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param planId the Plan ID to fetch the Plan information for
  * @returns the Plan information needed to construct the DMP Common Standard
  */
 // Fetch the Plan info needed from the MySQL database
 const loadPlanInfo = async (
+  rdsConnectionParams: ConnectionParams,
   planId: number
 ): Promise<LoadPlanInfo | undefined> => {
   const sql = `
@@ -186,7 +203,12 @@ const loadPlanInfo = async (
     FROM plans
     WHERE id = ?
   `;
-  const resp = await queryTable(sql, [planId.toString()])
+  rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching plan information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [planId.toString()]
+  );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     return resp.results[0];
   }
@@ -197,10 +219,12 @@ const loadPlanInfo = async (
  * Fetches the Project information needed to construct the DMP Common Standard
  * from the MySQL database
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param projectId the Project ID to fetch the Project information for
  * @returns the Project information needed to construct the DMP Common Standard
  */
 const loadProjectInfo = async (
+  rdsConnectionParams: ConnectionParams,
   projectId: number
 ): Promise<LoadProjectInfo | undefined> => {
   const sql = `
@@ -208,7 +232,12 @@ const loadProjectInfo = async (
     FROM projects
     WHERE id = ?
   `;
-  const resp = await queryTable(sql, [projectId.toString()])
+  rdsConnectionParams.logger.debug({ projectId, sql }, 'Fetching project information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [projectId.toString()]
+  );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     return resp.results[0];
   }
@@ -219,10 +248,12 @@ const loadProjectInfo = async (
  * Fetches the PlanFunding information needed to construct the DMP Common Standard
  * from the MySQL database
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param planId the Plan ID to fetch the PlanFunding information for
  * @returns the Funding information needed to construct the DMP Common Standard
  */
 const loadFundingInfo = async (
+  rdsConnectionParams: ConnectionParams,
   planId: number
 ): Promise<LoadFundingInfo[]> => {
   const sql = `
@@ -233,7 +264,12 @@ const loadFundingInfo = async (
       LEFT JOIN affiliations a ON prf.affiliationId = a.uri
     WHERE pf.planId = ?
   `;
-  const resp = await queryTable(sql, [planId.toString()]);
+  rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching plan funding information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [planId.toString()]
+  );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     const fundings = resp.results.filter((row) => !isNullOrUndefined(row));
     fundings.forEach((funding) =>
@@ -248,10 +284,12 @@ const loadFundingInfo = async (
  * Fetches the Plan's owner information needed to construct the DMP Common Standard
  * from the MySQL database
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param ownerId the user id for the plan's owner
  * @returns the contact information needed to construct the DMP Common Standard
  */
 async function loadContactFromPlanOwner(
+  rdsConnectionParams: ConnectionParams,
   ownerId: number
 ): Promise<LoadMemberInfo | undefined> {
   const sql = `
@@ -263,7 +301,13 @@ async function loadContactFromPlanOwner(
       LEFT JOIN affiliations a ON u.affiliationId = a.id
     WHERE u.id = ?
   `;
-  const resp = await queryTable(sql, [ownerId.toString()]);
+
+  rdsConnectionParams.logger.debug({ ownerId, sql }, 'Fetching plan owner information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [ownerId.toString()]
+  );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     return resp.results.filter((row) => !isNullOrUndefined(row))[0];
   }
@@ -274,10 +318,12 @@ async function loadContactFromPlanOwner(
  * Fetches the PlanMember information needed to construct the DMP Common Standard
  * from the MySQL database
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param planId the Plan ID to fetch the PlanMember information for
  * @returns the contributor information needed to construct the DMP Common Standard
  */
 const loadMemberInfo = async (
+  rdsConnectionParams: ConnectionParams,
   planId: number
 ): Promise<LoadMemberInfo[] | []> => {
   const sql = `
@@ -292,7 +338,13 @@ const loadMemberInfo = async (
     GROUP BY a.uri, a.name, pctr.email, pctr.givenName, pctr.surName,
       pctr.orcid, pc.isPrimaryContact;
   `;
-  const resp = await queryTable(sql, [planId.toString()]);
+
+  rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching plan member information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [planId.toString()]
+  );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     return resp.results.filter((row) => !isNullOrUndefined(row));
   }
@@ -303,17 +355,19 @@ const loadMemberInfo = async (
  * Returns a default RDA Common Standard Dataset entry for the DMP.
  * This is used when the Plan has no Answers to a Research Outputs question.
  *
+ * @param applicationName the name of the application/service
  * @param projectId the Project ID to use for the Dataset entry
  * @param planId the Plan ID to use for the Dataset entry
  * @returns a generic default Dataset entry
  */
 const defaultDataset = (
+  applicationName: string,
   projectId: number,
   planId: number
 ): RDACommonStandardDataset => {
   return {
     dataset_id: {
-      identifier: `${internalIdBase(projectId, planId)}.outputs.1`,
+      identifier: `${internalIdBase(applicationName, projectId, planId)}.outputs.1`,
       type: 'other'
     },
     personal_data: 'unknown',
@@ -328,12 +382,16 @@ const defaultDataset = (
  * from the MySQL database this information is extracted from the Answers table
  * for Research Output Questions
  *
+ * @param rdssConnectionParams the connection parameters for the MySQL database
+ * @param applicationName the name of the application/service
  * @param projectId the Project ID to fetch the Dataset information for
  * @param planId the Plan ID to fetch the Dataset information for
  * @param language the language to use for the Dataset information
  * @returns the dataset information needed to construct the DMP Common Standard
  */
 const loadDatasetInfo = async (
+  rdsConnectionParams: ConnectionParams,
+  applicationName: string,
   projectId: number,
   planId: number,
   language = 'eng'
@@ -345,7 +403,13 @@ const loadDatasetInfo = async (
     WHERE a.planId = ?
       AND a.json LIKE '%"researchOutputsTable"%';
   `;
-  const resp = await queryTable(sql, [planId.toString()]);
+
+  rdsConnectionParams.logger.debug({ projectId, planId, sql }, 'Fetching research output information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [planId.toString()]
+  );
   // There would typically only be one research outputs question per plan but
   // we need to allow for multiples just in case.
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
@@ -357,11 +421,12 @@ const loadDatasetInfo = async (
       // Loop through the rows and construct the RDA Common Standard Dataset object
       for (let idx = 0; idx < json.answer.length; idx++) {
         const row = json.answer[idx];
-        datasets.push(buildDataset(idx, row, projectId, planId, lang));
+        datasets.push(buildDataset(applicationName, idx, row, projectId, planId, lang));
       }
     }
   } else {
-    return [defaultDataset(projectId, planId)];
+    rdsConnectionParams.logger.debug({ projectId, planId }, 'Using the default dataset');
+    return [defaultDataset(applicationName, projectId, planId)];
   }
 
   return datasets;
@@ -370,10 +435,12 @@ const loadDatasetInfo = async (
 /**
  * Builds the RDA Common Standard Related Identifier entries for the DMP
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param projectId the Project ID to fetch the Related Works information for
  * @returns the RDA Common Standard Related Identifier entries for the DMP
  */
 const loadRelatedWorksInfo = async (
+  rdsConnectionParams: ConnectionParams,
   projectId: number
 ): Promise<RDACommonStandardRelatedWork[] | []> => {
   const sql = `
@@ -384,7 +451,12 @@ const loadRelatedWorksInfo = async (
     WHERE rw.projectId = ?;
   `;
 
-  const resp = await queryTable(sql, [projectId.toString()]);
+  rdsConnectionParams.logger.debug({ projectId, sql }, 'Fetching related works information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [projectId.toString()]
+  );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     const works = resp.results.filter((row) => !isNullOrUndefined(row));
     // Determine the identifier types
@@ -403,10 +475,12 @@ const loadRelatedWorksInfo = async (
 /**
  * Builds the DMP Tool Narrative extension for the DMP
  *
+ * @param rdssConnectionParams the connection parameters for the MySQL database
  * @param planId the Plan ID to fetch the narrative information for
  * @returns the DMP Tool Narrative extension for the DMP
  */
 const loadNarrativeTemplateInfo = async (
+  rdsConnectionParams: ConnectionParams,
   planId: number
 ): Promise<DMPExtensionNarrative | undefined> => {
   // Fetch the template, sections, questions and answers all at once
@@ -424,7 +498,13 @@ const loadNarrativeTemplateInfo = async (
     WHERE p.id = ?
     ORDER BY s.displayOrder, q.displayOrder;
   `;
-  const resp = await queryTable(sql, [planId.toString()]);
+
+  rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching narrative information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [planId.toString()]
+  );
 
   let results = [];
   // Filter out any null or undefined results
@@ -475,12 +555,15 @@ const loadNarrativeTemplateInfo = async (
 /**
  * Builds the RDA Common Standard Contact entry for the DMP
  *
+ * @param rdssConnectionParams the connection parameters for the MySQL database
  * @param plan the Plan information retrieve from the MySQL database
  * @param members the PlanMembers information retrieve from the MySQL database
  * @returns the RDA Common Standard Contact entry for the DMP
  * @throws DMPValidationError if no primary contact is found for the DMP
  */
 const buildContact = async (
+  rdsConnectionParams: ConnectionParams,
+  env: EnvironmentEnum,
   plan: LoadPlanInfo,
   members: LoadMemberInfo[]
 ): Promise<RDACommonStandardContact> => {
@@ -492,10 +575,10 @@ const buildContact = async (
   // If no primary contact is available, use the plan owner
   const primary: LoadMemberInfo | undefined = memberContact && memberContact.email
     ? memberContact
-    : await loadContactFromPlanOwner(Number(plan.createdById));
+    : await loadContactFromPlanOwner(rdsConnectionParams, Number(plan.createdById));
 
   if (primary && primary.email) {
-    const orcid: string | null = primary.orcid ? formatORCID(primary.orcid) : null;
+    const orcid: string | null = primary.orcid ? formatORCID(env, primary.orcid) : null;
 
     // Build the contact entry for the DMP
     const contactEntry: RDACommonStandardContact = {
@@ -530,6 +613,7 @@ const buildContact = async (
 /**
  * Builds the RDA Common Standard Contributor array for the DMP from the PlanMembers
  *
+ * @param applicationName the name of the application/service
  * @param planId the Plan ID
  * @param projectId the Project ID
  * @param members the PlanMembers information retrieve from the MySQL database
@@ -537,6 +621,8 @@ const buildContact = async (
  * @returns the RDA Common Standard Contributor array for the DMP
  */
 const buildContributors = (
+  applicationName: string,
+  env: EnvironmentEnum,
   planId: number,
   projectId: number,
   members: LoadMemberInfo[],
@@ -560,7 +646,7 @@ const buildContributors = (
     } as RDACommonStandardContributor;
 
     // Use the member's ORCID if it exists, otherwise generate a new one'
-    const formatted: string | null = member.orcid ? formatORCID(member.orcid) : null;
+    const formatted: string | null = member.orcid ? formatORCID(env, member.orcid) : null;
     if (formatted !== null) {
       contrib.contributor_id = [{
         identifier: formatted,
@@ -569,7 +655,7 @@ const buildContributors = (
     } else {
       // RDA Common Standard requires an id so generate one
       contrib.contributor_id = [{
-        identifier: `${internalIdBase(projectId, planId)}.members.${member.id}`,
+        identifier: `${internalIdBase(applicationName, projectId, planId)}.members.${member.id}`,
         type: 'other'
       }]
     }
@@ -592,12 +678,18 @@ const buildContributors = (
 /**
  * Builds the DMP Tool extensions to the RDA Common Standard
  *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
+ * @param applicationName the name of the application/service
+ * @param domainName the domain name of the DMP Tool
  * @param plan the Plan information retrieve from the MySQL database
  * @param project the Project information retrieve from the MySQL database
  * @param funding the Funding information retrieve from the MySQL database
  * @returns the DMP metadata with extensions from the DMP Tool
  */
 const buildDMPToolExtensions = async (
+  rdsConnectionParams: ConnectionParams,
+  applicationName: string,
+  domainName: string,
   plan: LoadPlanInfo,
   project: LoadProjectInfo,
   funding: LoadFundingInfo | undefined,
@@ -607,14 +699,17 @@ const buildDMPToolExtensions = async (
     // Ignoring the `!` assertion here because we know we check the env variable
     // when the entrypoint function is called.
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    provenance: process.env.APPLICATION_NAME!,
+    provenance: applicationName!,
     featured: plan.featured ? 'yes' : 'no',
     privacy: plan.visibility?.toLowerCase() ?? 'private',
     status: plan.status?.toLowerCase() ?? 'draft',
   }
 
   // Generate the DMP Narrative
-  const narrative = await loadNarrativeTemplateInfo(plan.id);
+  const narrative = await loadNarrativeTemplateInfo(
+    rdsConnectionParams,
+    plan.id
+  );
 
   // Fetch the research domain if one was specified
   const research_domain = project.dmptool_research_domain
@@ -626,13 +721,13 @@ const buildDMPToolExtensions = async (
 
   if (funding) {
     const projectId: RDACommonStandardIdentifierType = {
-      identifier: internalIdBase(project.id, plan.id),
+      identifier: internalIdBase(applicationName, project.id, plan.id),
       type: StandardIdentifierType.OTHER
     };
 
     const funderId: RDACommonStandardIdentifierType = funding.uri === undefined
       ? {
-        identifier: `${internalIdBase(project.id, plan.id)}.fundings.${funding.id}`,
+        identifier: `${internalIdBase(applicationName, project.id, plan.id)}.fundings.${funding.id}`,
         type: StandardIdentifierType.OTHER
       }
       : {
@@ -693,7 +788,7 @@ const buildDMPToolExtensions = async (
 
   if (!isNullOrUndefined(narrative)) {
     extensions.narrative = {
-      download_url: `https://${process.env.DOMAIN_NAME}/dmps/${plan.dmpId}/narrative`,
+      download_url: `https://${domainName}/dmps/${plan.dmpId}/narrative`,
       template: narrative
     };
   }
@@ -704,12 +799,14 @@ const buildDMPToolExtensions = async (
 /**
  * Builds the Project and Funding info for the RDA Common Standard
  *
+ * @param applicationName the name of the application/service
  * @param planId the Plan ID
  * @param project the Project information retrieve from the MySQL database
  * @param funding the Funding information retrieve from the MySQL database
  * @returns the Project and Funding info for the RDA Common Standard
  */
 const buildProject = (
+  applicationName: string,
   planId: number,
   project: LoadProjectInfo,
   funding: LoadFundingInfo | undefined
@@ -735,7 +832,7 @@ const buildProject = (
         type: (funding).uri?.match(ROR_REGEX) ? 'ror' : 'url'
       }
       : {
-        identifier: `${internalIdBase(project.id, planId)}.fundings.${funding.id}`,
+        identifier: `${internalIdBase(applicationName, project.id, planId)}.fundings.${funding.id}`,
         type: 'other'
       };
 
@@ -760,7 +857,7 @@ const buildProject = (
     start: project.startDate ?? undefined,
     end: project.endDate ?? undefined,
     project_id: [{
-      identifier: internalIdBase(project.id, planId),
+      identifier: internalIdBase(applicationName, project.id, planId),
       type: 'other'
     }],
     funding: fundingObject
@@ -812,6 +909,7 @@ const byteSizeToBytes = (size: NumberWithContextAnswerType): number | undefined 
  * Convert a @dmptool/types researchOutputTable answer row into an RDA Common
  * Standard Dataset object.
  *
+ * @param applicationName the name of the application/service
  * @param rowIdx the index of the answer row
  * @param row the answer row
  * @param projectId the ID of the project that the dataset belongs to
@@ -820,6 +918,7 @@ const byteSizeToBytes = (size: NumberWithContextAnswerType): number | undefined 
  * @returns a RDA Common Standard Dataset object
  */
 const buildDataset = (
+  applicationName: string,
   rowIdx: number,
   row: ResearchOutputTableRowAnswerType,
   projectId: number,
@@ -908,7 +1007,7 @@ const buildDataset = (
     type: isNullOrUndefined(typ) ? 'dataset' : typ.answer,
     description: isNullOrUndefined(desc) ? undefined : desc.answer,
     dataset_id: {
-      identifier: `${internalIdBase(projectId, planId)}.outputs.${rowIdx + 1}`,
+      identifier: `${internalIdBase(applicationName, projectId, planId)}.outputs.${rowIdx + 1}`,
       type: 'other'
     },
     personal_data: isNullOrUndefined(flags) ?
@@ -948,11 +1047,13 @@ const buildDataset = (
  * Validate the specified DMP metadata record against the RDA Common Standard
  * and DMP Tool extensions schema
  *
+ * @param logger the logger to use for logging
  * @param dmp The DMP metadata record to validate
  * @returns the DMP metadata record if it is valid
  * @throws DMPValidationError if the record is invalid with the error message(s)
  */
 export const validateRDACommonStandard = (
+  logger: Logger,
   dmp: DMPToolDMPType
 ): DMPToolDMPType => {
   const validationErrors: string[] = [];
@@ -967,9 +1068,9 @@ export const validateRDACommonStandard = (
   }
 
   if (validationErrors.length > 0) {
-    throw new DMPValidationError(
-      `Invalid RDA Common Standard: ${validationErrors.join('; ')}`
-    );
+    const msg = `Invalid RDA Common Standard: ${validationErrors.join('; ')}`;
+    logger.warn({ dmpId: dmp?.dmp?.dmp_id?.identifier }, msg);
+    throw new DMPValidationError(msg);
   }
 
   return dmp;
@@ -979,11 +1080,14 @@ export const validateRDACommonStandard = (
  * Validate the specified DMP metadata record against the RDA Common Standard
  * and DMP Tool extensions schema
  *
+ * @param logger the logger to use for logging
  * @param dmp The DMP metadata record to validate
  * @returns the DMP metadata record if it is valid
  * @throws DMPValidationError if the record is invalid with the error message(s)
  */
 export const validateDMPToolExtensions = (
+  logger: Logger,
+  dmpId: string,
   dmp: DMPToolExtensionType
 ): DMPToolExtensionType => {
   const validationErrors: string[] = [];
@@ -997,9 +1101,9 @@ export const validateDMPToolExtensions = (
   }
 
   if (validationErrors.length > 0) {
-    throw new DMPValidationError(
-      `Invalid DMP Tool extensions: ${validationErrors.join('; ')}`
-    );
+    const msg = `Invalid DMP Tool extensions: ${validationErrors.join('; ')}`;
+    logger.warn({ dmpId }, msg);
+    throw new DMPValidationError(msg);
   }
 
   return dmp;
@@ -1043,46 +1147,67 @@ const cleanRDACommonStandard = (
  *   - The `registered` indicates whether the DMP is published/registered with DataCite/EZID
  *   - The `tombstoned` indicates that it was published/registered but is now removed
  *
+ * @param rdsConnectionParams the connection parameters for the RDS instance
+ * @param applicationName the name of the application/service
+ * @param domainName the domain name of the application/service website
  * @param planId the ID of the plan to generate the DMP for
+ * @param env The environment from EnvironmentEnum (defaults to EnvironmentEnum.DEV)
  * @returns a JSON representation of the DMP
  */
 export async function planToDMPCommonStandard(
+  rdsConnectionParams: ConnectionParams,
+  applicationName: string,
+  domainName: string,
+  env: EnvironmentEnum = EnvironmentEnum.DEV,
   planId: number
 ): Promise<DMPToolDMPType | undefined> {
-  if (isNullOrUndefined(process.env.ENV)) {
-    throw new Error('ENV environment variable is not set');
-  }
-  if (isNullOrUndefined(process.env.DOMAIN_NAME)) {
-    throw new Error('DOMAIN_NAME environment variable is not set');
-  }
-  if (isNullOrUndefined(process.env.APPLICATION_NAME)) {
-    throw new Error('APPLICATION_NAME environment variable is not set');
+  if (!rdsConnectionParams || !applicationName || !domainName || !planId) {
+    throw new Error('Invalid arguments provided to planToDMPCommonStandard');
   }
 
   // Fetch the Plan data
-  const plan: LoadPlanInfo | undefined = await loadPlanInfo(planId);
+  const plan: LoadPlanInfo | undefined = await loadPlanInfo(
+    rdsConnectionParams,
+    planId
+  );
   if (plan === undefined) {
+    rdsConnectionParams.logger.error({ planId, applicationName, env }, 'Plan not found');
     throw new DMPValidationError(`Plan not found: ${planId}`);
   }
 
   if (isNullOrUndefined(plan.title)) {
+    rdsConnectionParams.logger.error({ planId, applicationName, env }, 'Plan title not found');
     throw new DMPValidationError(`Plan title not found for plan: ${planId}`);
   }
 
   if (isNullOrUndefined(plan.dmpId)) {
+    rdsConnectionParams.logger.error({ planId, applicationName, env }, 'Plan dmpId not found');
     throw new DMPValidationError(`DMP ID not found for plan: ${planId}`);
   }
 
   // Get the Project data
-  const project: LoadProjectInfo | undefined = await loadProjectInfo(plan.projectId);
+  const project: LoadProjectInfo | undefined = await loadProjectInfo(
+    rdsConnectionParams,
+    plan.projectId
+  );
   if (project === undefined || !project.title) {
+    rdsConnectionParams.logger.error({ planId, applicationName, env }, 'Project not found');
     throw new DMPValidationError(`Project not found: ${plan.projectId}`);
   }
 
   // Get all the plan members and determine the primary contact
-  const members: LoadMemberInfo[] = plan.id ? await loadMemberInfo(plan.id) : [];
-  const contact: RDACommonStandardContact = await buildContact(plan, members);
+  const members: LoadMemberInfo[] = plan.id ? await loadMemberInfo(
+    rdsConnectionParams,
+    plan.id
+  ) : [];
+  const contact: RDACommonStandardContact = await buildContact(
+    rdsConnectionParams,
+    env,
+    plan,
+    members
+  );
   if (!contact) {
+    rdsConnectionParams.logger.error({ planId, applicationName, env }, 'Could not build primary contact');
     throw new DMPValidationError(
       `Could not establish a primary contact for plan: ${planId}`
     );
@@ -1090,17 +1215,23 @@ export async function planToDMPCommonStandard(
 
   // Get all the funding and narrative info
   const datasets: RDACommonStandardDataset[] | [] = await loadDatasetInfo(
+    rdsConnectionParams,
+    applicationName,
     project.id,
     plan.id,
     plan.languageId
   );
   // We only allow one funding per plan at this time
-  const fundings: LoadFundingInfo[] | [] = await loadFundingInfo(plan.id);
+  const fundings: LoadFundingInfo[] | [] = await loadFundingInfo(
+    rdsConnectionParams,
+    plan.id
+  );
   const funding: LoadFundingInfo | undefined = fundings.length > 0 ? fundings[0] : undefined;
   const works: RDACommonStandardRelatedWork[] | [] = await loadRelatedWorksInfo(
+    rdsConnectionParams,
     plan.projectId
   );
-  const defaultRole: string | undefined = await loadDefaultMemberRole();
+  const defaultRole: string | undefined = await loadDefaultMemberRole(rdsConnectionParams);
 
   // If the plan is registered, use the DOI as the identifier, otherwise convert to a URL
   const dmpId = plan.registered
@@ -1109,7 +1240,7 @@ export async function planToDMPCommonStandard(
       type: 'doi'
     }
     : {
-      identifier: `https://${process.env.DOMAIN_NAME}/projects/${project.id}/dmp/${plan.id}`,
+      identifier: `https://${domainName}/projects/${project.id}/dmp/${plan.id}`,
       type: 'url'
     };
 
@@ -1146,11 +1277,14 @@ export async function planToDMPCommonStandard(
     },
   };
   const dmpProject: RDACommonStandardProject | undefined = buildProject(
+    applicationName,
     plan.id,
     project,
     funding
   );
   const dmpContributor: RDACommonStandardContributor[] | [] = buildContributors(
+    applicationName,
+    env,
     plan.id,
     project.id,
     members,
@@ -1174,16 +1308,24 @@ export async function planToDMPCommonStandard(
 
   // Generate the DMP Tool extensions to the RDA Common Standard
   const extensions: DMPToolExtensionType = await buildDMPToolExtensions(
+    rdsConnectionParams,
+    applicationName,
+    domainName,
     plan,
     project,
     funding
   );
 
+  rdsConnectionParams.logger.debug(
+    { applicationName, domainName, planId, env, dmpId: plan.dmpId },
+    'Generated maDMP metadata record'
+  );
+
   // Return the combined DMP metadata record
   return {
     dmp: {
-      ...validateRDACommonStandard(cleaned).dmp,
-      ...validateDMPToolExtensions(extensions),
+      ...validateRDACommonStandard(rdsConnectionParams.logger, cleaned).dmp,
+      ...validateDMPToolExtensions(rdsConnectionParams.logger, plan.dmpId, extensions),
     }
   };
 }

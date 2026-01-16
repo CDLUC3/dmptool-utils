@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+# v1.0.6
+- Removed all references to `process.env` and instead added those values as input arguments
+
 # v1.0.0
 - Ported over initial `cloudFormation` code from old `dmsp_api-_prototype` repo
 - Ported over initial `dynamo` code from `dmsp_backend_prototype` repo's Dynamo datasource

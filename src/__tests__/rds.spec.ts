@@ -1,7 +1,18 @@
 import { queryTable } from '../rds';
 import * as mysql from 'mysql2/promise';
+import pino, { Logger } from 'pino';
 
 jest.mock('mysql2/promise');
+
+const mockLogger: Logger = pino({ level: 'silent' });
+const mockConfig = {
+  logger: mockLogger,
+  host: 'localhost',
+  port: 3306,
+  user: 'test',
+  password: 'test',
+  database: 'testdb'
+}
 
 describe('queryTable', () => {
   let mockConnection: any;
@@ -27,7 +38,7 @@ describe('queryTable', () => {
     const mockFields = [{name: 'id'}, {name: 'name'}];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    const result = await queryTable('SELECT * FROM users');
+    const result = await queryTable(mockConfig, 'SELECT * FROM users');
 
     expect(result).toEqual({results: mockResults, fields: mockFields});
     expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM users', []);
@@ -39,7 +50,7 @@ describe('queryTable', () => {
     const mockFields = [{name: 'id'}, {name: 'name'}];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    const result = await queryTable('SELECT * FROM users WHERE id = ?', [1]);
+    const result = await queryTable(mockConfig, 'SELECT * FROM users WHERE id = ?', [1]);
 
     expect(result).toEqual({results: mockResults, fields: mockFields});
     expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM users WHERE id = ?', [1]);
@@ -51,7 +62,7 @@ describe('queryTable', () => {
     const mockFields: any[] = [];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    await queryTable('INSERT INTO users VALUES (?, ?)', [null, undefined]);
+    await queryTable(mockConfig, 'INSERT INTO users VALUES (?, ?)', [null, undefined]);
 
     expect(mockQuery).toHaveBeenCalledWith('INSERT INTO users VALUES (?, ?)', [null, null]);
     expect(mockEnd).toHaveBeenCalled();
@@ -62,7 +73,7 @@ describe('queryTable', () => {
     const mockFields: any[] = [];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    await queryTable('INSERT INTO users VALUES (?)', [123]);
+    await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [123]);
 
     expect(mockQuery).toHaveBeenCalledWith('INSERT INTO users VALUES (?)', [123]);
   });
@@ -72,7 +83,7 @@ describe('queryTable', () => {
     const mockFields: any[] = [];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    await queryTable('INSERT INTO users VALUES (?)', [true]);
+    await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [true]);
 
     expect(mockQuery).toHaveBeenCalledWith('INSERT INTO users VALUES (?)', [true]);
   });
@@ -82,7 +93,7 @@ describe('queryTable', () => {
     const mockFields: any[] = [];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    await queryTable('INSERT INTO users VALUES (?)', [[1, 2, 3]]);
+    await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [[1, 2, 3]]);
 
     expect(mockQuery).toHaveBeenCalledWith('INSERT INTO users VALUES (?)', ['[1,2,3]']);
   });
@@ -93,7 +104,7 @@ describe('queryTable', () => {
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     const testDate = new Date('2023-01-01T12:00:00Z');
-    await queryTable('INSERT INTO users VALUES (?)', [testDate]);
+    await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [testDate]);
 
     expect(mockQuery).toHaveBeenCalled();
     const calledArgs = mockQuery.mock.calls[0][1];
@@ -105,7 +116,7 @@ describe('queryTable', () => {
     const mockFields: any[] = [];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    await queryTable('INSERT INTO users VALUES (?)', ['test string']);
+    await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', ['test string']);
 
     expect(mockQuery).toHaveBeenCalledWith('INSERT INTO users VALUES (?)', ['test string']);
   });
@@ -115,7 +126,7 @@ describe('queryTable', () => {
     const mockFields: any[] = [];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    await queryTable('SELECT  *\n\tFROM\tusers\n\tWHERE  id = ?', [1]);
+    await queryTable(mockConfig, 'SELECT  *\n\tFROM\tusers\n\tWHERE  id = ?', [1]);
 
     expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM users WHERE id = ?', [1]);
     expect(mockEnd).toHaveBeenCalled();
@@ -126,7 +137,7 @@ describe('queryTable', () => {
     const mockFields: any[] = [];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
 
-    await queryTable('SELECT * FROM users');
+    await queryTable(mockConfig, 'SELECT * FROM users');
 
     expect(mockEnd).toHaveBeenCalledTimes(1);
   });

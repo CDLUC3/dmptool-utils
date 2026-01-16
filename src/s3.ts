@@ -1,3 +1,4 @@
+import { Logger } from 'pino';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   S3Client,
@@ -20,34 +21,44 @@ export interface DMPToolListObjectsOutput {
 /**
  * List the contents of a bucket that match a key prefix.
  *
+ * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to list.
  * @param keyPrefix The prefix to filter the results by.
  * @returns A list of objects that match the key prefix, or undefined if the
  * bucket or key prefix are invalid.
  */
 export const listObjects = async (
+  logger: Logger,
   bucket: string,
   keyPrefix: string
 ): Promise<DMPToolListObjectsOutput[] | []> => {
-  if (bucket && bucket.trim() !== '') {
-    const listObjectsCommand = new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: keyPrefix
-    });
-    const response: ListObjectsV2CommandOutput = await s3Client.send(listObjectsCommand);
+  if (logger && bucket && bucket.trim() !== '') {
+    try {
+      const listObjectsCommand = new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: keyPrefix
+      });
+      logger.debug({ bucket, keyPrefix }, 'Listing objects in bucket');
 
-    if (Array.isArray(response.Contents) && response.Contents.length > 0) {
-      const objects: DMPToolListObjectsOutput[] = [];
-      for (const obj of response.Contents) {
-        if (obj && obj.Key && obj.LastModified && obj.Size) {
-          objects.push({
-            key: obj.Key,
-            lastModified: obj.LastModified,
-            size: obj.Size
-          });
+      const response: ListObjectsV2CommandOutput = await s3Client.send(listObjectsCommand);
+
+      if (Array.isArray(response.Contents) && response.Contents.length > 0) {
+        const objects: DMPToolListObjectsOutput[] = [];
+        for (const obj of response.Contents) {
+          if (obj && obj.Key && obj.LastModified && obj.Size) {
+            objects.push({
+              key: obj.Key,
+              lastModified: obj.LastModified,
+              size: obj.Size
+            });
+          }
         }
+        logger.debug({ objects }, 'Found objects in bucket');
+        return objects;
       }
-      return objects;
+    } catch (error) {
+      logger.fatal({ bucket, error }, 'Error listing objects in bucket');
+      throw error;
     }
   }
   return [];
@@ -56,17 +67,25 @@ export const listObjects = async (
 /**
  * Get an object from the specified bucket.
  *
+ * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to get the object from.
  * @param key The key of the object to get.
  * @returns The object, or undefined if the bucket or key are invalid.
  */
 export const getObject = async (
+  logger: Logger,
   bucket: string,
   key: string
 ): Promise<GetObjectCommandOutput | undefined> => {
-  if (bucket && key && bucket.trim() !== '' && key.trim() !== '') {
-    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-    return await s3Client.send(command);
+  if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
+    try {
+      const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+      logger.debug({ bucket, key }, 'Getting object from bucket');
+      return await s3Client.send(command);
+    } catch (error) {
+      logger.fatal({ bucket, key, error }, 'Error getting object from bucket');
+      throw error;
+    }
   }
   return undefined;
 }
@@ -74,6 +93,7 @@ export const getObject = async (
 /**
  * Put an object into the specified bucket.
  *
+ * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to put the object into.
  * @param key The key of the object to put.
  * @param body The object to put.
@@ -83,21 +103,28 @@ export const getObject = async (
  * bucket or key are invalid.
  */
 export const putObject = async (
+  logger: Logger,
   bucket: string,
   key: string,
   body: any,
   contentType = 'application/json',
   contentEncoding = 'utf-8'
 ): Promise<PutObjectCommandOutput | undefined> => {
-  if (bucket && key && bucket.trim() !== '' && key.trim() !== '') {
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ContentEncoding: contentEncoding,
-    });
-    return await s3Client.send(command);
+  if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
+    try {
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        ContentEncoding: contentEncoding,
+      });
+      logger.debug({ bucket, key }, 'Putting object into bucket');
+      return await s3Client.send(command);
+    } catch (error) {
+      logger.fatal({ bucket, key, error }, 'Error putting object into bucket');
+      throw error;
+    }
   }
   return undefined;
 }
@@ -105,22 +132,30 @@ export const putObject = async (
 /**
  * Generate a Pre-signed URL for an S3 object.
  *
+ * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to generate the URL for.
  * @param key The key of the object to generate the URL for.
  * @param usePutMethod Whether to use the PUT method for the URL. Defaults to false.
  * @returns The Pre-signed URL, or undefined if the bucket or key are invalid.
  */
 export const getPresignedURL = async (
+  logger: Logger,
   bucket: string,
   key: string,
   usePutMethod = false
 ): Promise<string | undefined> => {
-  if (bucket && key && bucket.trim() !== '' && key.trim() !== '') {
+  if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
     const params = { Bucket: bucket, Key: key };
-    const command: GetObjectCommand | PutObjectCommand = usePutMethod
-      ? new PutObjectCommand(params)
-      : new GetObjectCommand(params);
-    return await getSignedUrl(s3Client, command, { expiresIn: 900 });;
+    try {
+      const command: GetObjectCommand | PutObjectCommand = usePutMethod
+        ? new PutObjectCommand(params)
+        : new GetObjectCommand(params);
+      logger.debug({ ...params, usePutMethod }, 'Generating presigned URL');
+      return await getSignedUrl(s3Client, command, { expiresIn: 900 });;
+    } catch (error) {
+      logger.fatal({ ...params, usePutMethod, error }, 'Error generating a presigned URL');
+      throw error;
+    }
   }
   return undefined;
 }

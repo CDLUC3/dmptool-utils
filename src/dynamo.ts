@@ -1,3 +1,4 @@
+import { Logger } from 'pino';
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import {
   AttributeValue,
@@ -26,6 +27,13 @@ const DMP_VERSION_PREFIX = 'VERSION';
 const DMP_EXTENSION_PREFIX = 'EXTENSION';
 export const DMP_LATEST_VERSION = 'latest';
 export const DMP_TOMBSTONE_VERSION = 'tombstone';
+
+export interface DynamoConnectionParams {
+  logger: Logger;
+  region: string;
+  tableName: string;
+  maxAttempts: number;
+}
 
 // The list of properties that are extensions to the RDA Common Standard
 const EXTENSION_KEYS: string[] = [
@@ -61,13 +69,6 @@ type RDACommonStandardInnerType = RDACommonStandardDMPType extends { dmp: infer 
 type DynamoVersionItemType = RDACommonStandardInnerType & DynamoItemType;
 type DynamoExtensionItemType = DMPToolExtensionType & DynamoItemType;
 
-const dynamoConfigParams: DynamoDBClientConfig = {
-  region: process.env.AWS_REGION || 'us-west-2',
-  maxAttempts: process.env.DYNAMO_MAX_ATTEMPTS
-    ? parseInt(process.env.DYNAMO_MAX_ATTEMPTS)
-    : 3,
-}
-
 class DMPToolDynamoError extends Error {
   constructor(message: string) {
     super(message);
@@ -76,18 +77,29 @@ class DMPToolDynamoError extends Error {
 }
 
 // Initialize AWS SDK clients (outside the handler function)
-const dynamoDBClient = new DynamoDBClient(dynamoConfigParams);
+const getDynamoDBClient = (
+  dynamoConfigParams: DynamoDBClientConfig
+): DynamoDBClient => {
+  const { region, maxAttempts } = dynamoConfigParams;
+  return new DynamoDBClient({ region, maxAttempts });
+}
 
 /**
  * Lightweight query just to check if the DMP exists.
  *
- * @param dmpId
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
  * @returns true if the DMP exists, false otherwise.
  * @throws DMPToolDynamoError if the record could not be fetched due to an error
  */
 export const DMPExists = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   dmpId: string
 ): Promise<boolean> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0) {
+    throw new DMPToolDynamoError('Missing Dynamo config or DMP ID');
+  }
+
   // Very lightweight here, just returning a PK if successful
   const params = {
     KeyConditionExpression: "PK = :pk AND SK = :sk",
@@ -98,15 +110,18 @@ export const DMPExists = async (
     ProjectExpression: "PK"
   }
 
+  dynamoConnectionParams.logger.debug({ ...params, dmpId}, 'Checking if DMP exists in DynamoDB')
   try {
-    const response = await queryTable(params);
+    const response = await queryTable(dynamoConnectionParams, params);
     return !isNullOrUndefined(response)
       && Array.isArray(response.Items)
       && response.Items.length > 0;
 
   } catch (err) {
+    const errMsg: string = toErrorMessage(err);
+    dynamoConnectionParams.logger.fatal({ ...params, dmpId, errMsg}, 'Failed to check for DMP existence' )
     throw new DMPToolDynamoError(
-      `Unable to check if DMP exists id: ${dmpId} - ${toErrorMessage(err)}`
+      `Unable to check if DMP exists id: ${dmpId} - ${errMsg}`
     );
   }
 }
@@ -114,13 +129,19 @@ export const DMPExists = async (
 /**
  * Fetch the version timestamps (including DMP_LATEST_VERSION) for the specified DMP ID.
  *
- * @param dmpId
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
  * @returns The timestamps as strings (e.g. '2026-11-01T13:08:19Z' or 'latest')
  * @throws DMPToolDynamoError if the records could not be fetched due to an error
  */
 export const getDMPVersions = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   dmpId: string
 ): Promise<DMPVersionType[] | []> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0) {
+    throw new DMPToolDynamoError('Missing Dynamo Config or DMP ID');
+  }
+
   const params = {
     KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
     ExpressionAttributeValues: {
@@ -129,8 +150,10 @@ export const getDMPVersions = async (
     },
     ProjectionExpression: "PK, SK, modified"
   }
+
+  dynamoConnectionParams.logger.debug({ ...params, dmpId }, 'Fetching DMP versions from DynamoDB')
   try {
-    const response: QueryCommandOutput = await queryTable(params);
+    const response: QueryCommandOutput = await queryTable(dynamoConnectionParams, params);
 
     if (Array.isArray(response.Items) && response.Items.length > 0) {
       const versions: DMPVersionType[] = [];
@@ -149,8 +172,10 @@ export const getDMPVersions = async (
     }
     return [];
   } catch (err) {
+    const errMsg: string = toErrorMessage(err);
+    dynamoConnectionParams.logger.fatal({ ...params, dmpId, errMsg }, 'Failed to fetch DMP versions' )
     throw new DMPToolDynamoError(
-      `Unable to fetch DMP versions id: ${dmpId} - ${toErrorMessage(err)}`
+      `Unable to fetch DMP versions id: ${dmpId} - ${errMsg}`
     );
   }
 }
@@ -159,7 +184,9 @@ export const getDMPVersions = async (
  * Fetch the RDA Common Standard metadata record with DMP Tool specific extensions
  * for the specified DMP ID.
  *
- * @param dmpId
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param domainName The domain name of the DMPTool instance (e.g. 'dmptool.org')
+ * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
  * @param version The version of the DMP metadata record to persist
  * (e.g. '2026-11-01T13:08:19Z').
  * If not provided, the latest version will be used. Defaults to DMP_LATEST_VERSION.
@@ -173,10 +200,16 @@ export const getDMPVersions = async (
 //   - Version is optional, if it is not provided, ALL versions will be returned
 //   - If you just want the latest version, use the DMP_LATEST_VERSION constant
 export const getDMPs = async (
+  dynamoConnectionParams: DynamoConnectionParams,
+  domainName: string,
   dmpId: string,
   version: string | null,
   includeExtensions = true
 ): Promise<DMPToolDMPType[] | []> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0) {
+    throw new DMPToolDynamoError('Missing Dynamo config or DMP ID');
+  }
+
   let params = {};
 
   if (version) {
@@ -197,8 +230,13 @@ export const getDMPs = async (
     }
   }
 
+  dynamoConnectionParams.logger.debug(
+    { ...params, dmpId, version, includeExtensions },
+    'Fetching DMPs from DynamoDB'
+  );
+
   try {
-    const response: QueryCommandOutput = await queryTable(params);
+    const response: QueryCommandOutput = await queryTable(dynamoConnectionParams, params);
     if (response && response.Items && response.Items.length > 0) {
       const unmarshalled: DynamoVersionType[] = response.Items.map(item => unmarshall(item));
 
@@ -214,6 +252,8 @@ export const getDMPs = async (
         return await Promise.all(items.map(async (item: DynamoVersionType) => {
           // Fetch the DMP Tool extensions
           const extensions: DMPToolExtensionType[] = await getDMPExtensions(
+            dynamoConnectionParams,
+            domainName,
             dmpId,
             item.SK.replace(`${DMP_VERSION_PREFIX}#`, '')
           );
@@ -241,8 +281,13 @@ export const getDMPs = async (
       }
     }
   } catch (err) {
+    const errMsg: string = toErrorMessage(err);
+    dynamoConnectionParams.logger.fatal(
+      { ...params, dmpId, version, includeExtensions, errMsg },
+      errMsg
+    );
     throw new DMPToolDynamoError(
-      `Unable to fetch DMP id: ${dmpId}, ver: ${version} - ${toErrorMessage(err)}`
+      `Unable to fetch DMP id: ${dmpId}, ver: ${version} - ${errMsg}`
     );
   }
   return [];
@@ -251,7 +296,8 @@ export const getDMPs = async (
 /**
  * Fetch the specified DMP Extensions metadata record
  *
- * @param dmpId
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
  * @param version The version of the DMP metadata record to persist
  * (e.g. '2026-11-01T13:08:19Z').
  * If not provided, the latest version will be used. Defaults to DMP_LATEST_VERSION.
@@ -259,9 +305,15 @@ export const getDMPs = async (
  * @throws DMPToolDynamoError if the record could not be fetched
  */
 const getDMPExtensions = async (
+  dynamoConnectionParams: DynamoConnectionParams,
+  domainName: string,
   dmpId: string,
   version: string | null
 ): Promise<DMPToolExtensionType[] | []> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0) {
+    throw new DMPToolDynamoError('Missing Dynamo Config or DMP ID');
+  }
+
   let params = {};
 
   if (version) {
@@ -282,12 +334,14 @@ const getDMPExtensions = async (
     }
   }
 
-  const response: QueryCommandOutput = await queryTable(params);
+  dynamoConnectionParams.logger.debug({ ...params, dmpId, version }, 'Fetching DMP Extensions from DynamoDB');
+
+  const response: QueryCommandOutput = await queryTable(dynamoConnectionParams, params);
   if (response && response.Items && response.Items.length > 0) {
     const unmarshalled: DynamoExtensionItemType[] = response.Items.map(item => unmarshall(item) as DynamoExtensionItemType);
 
     // sort the results by the SK (version) descending
-    const items: DynamoExtensionItemType[] = unmarshalled.sort((a:DynamoExtensionItemType, b: DynamoExtensionItemType) => {
+    const items: DynamoExtensionItemType[] = unmarshalled.sort((a: DynamoExtensionItemType, b: DynamoExtensionItemType) => {
       return (b.SK).toString().localeCompare((a.SK).toString());
     });
 
@@ -295,10 +349,13 @@ const getDMPExtensions = async (
     return Promise.all(items.map(async (item: DynamoExtensionItemType) => {
       // Destructure the Dynamo item because we don't need to return the PK and SK
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { PK, SK, ...extension } = item;
+      const {PK, SK, ...extension} = item;
 
       // Fetch all the version timestamps
-      const versions: DMPVersionType[] = await getDMPVersions(dmpId)
+      const versions: DMPVersionType[] = await getDMPVersions(
+        dynamoConnectionParams,
+        dmpId
+      );
 
       if (Array.isArray(versions) && versions.length > 0) {
         // Return the versions sorted descending
@@ -310,7 +367,7 @@ const getDMPExtensions = async (
               ? ''
               : `?version=${v.modified}`;
             const dmpIdWithoutProtocol = dmpId.replace(/^https?:\/\//, '');
-            const accessURLBase = `https://${process.env.DOMAIN_NAME}/dmps/`
+            const accessURLBase = `https://${domainName}/dmps/`
             return {
               access_url: `${accessURLBase}${dmpIdWithoutProtocol}${queryParam}`,
               version: v.modified,
@@ -329,7 +386,9 @@ const getDMPExtensions = async (
  * This function will handle the separation of RDA Common Standard and DMP Tool
  * specific metadata.
  *
- * @param dmpId The DMP ID (e.g. '123456789')
+ * @param dynamoConnectionParams The DynamoDB connection parameters
+ * @param domainName The domain name of the DMPTool instance (e.g. 'dmptool.org')
+ * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
  * @param dmp The DMP metadata record to persist as either an RDA Common Standard
  * or the standard with DMP Tool specific extensions.
  * @param version The version of the DMP metadata record to persist
@@ -342,18 +401,21 @@ const getDMPExtensions = async (
  * @throws DMPToolDynamoError if the record could not be persisted
  */
 export const createDMP = async (
+  dynamoConnectionParams: DynamoConnectionParams,
+  domainName: string,
   dmpId: string,
   dmp: DMPToolDMPType,
   version = DMP_LATEST_VERSION,
   includeExtensions = true
 ): Promise<DMPToolDMPType | undefined> => {
-  if (!dmpId || dmpId.trim().length === 0 || !dmp) {
-    throw new DMPToolDynamoError('Missing DMP ID or DMP metadata record');
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0 || !dmp) {
+    throw new DMPToolDynamoError('Missing Dynamo config, DMP ID or DMP metadata record');
   }
 
   // If the version is LATEST, then first make sure there is not already one present!
-  const exists: boolean = await DMPExists(dmpId);
+  const exists: boolean = await DMPExists(dynamoConnectionParams, dmpId);
   if (exists) {
+    dynamoConnectionParams.logger.error({ dmpId }, 'Latest version already exists');
     throw new DMPToolDynamoError('Latest version already exists');
   }
 
@@ -374,21 +436,39 @@ export const createDMP = async (
       SK: versionToSK(version),
     }
 
+    dynamoConnectionParams.logger.debug({ dmpId, version, includeExtensions }, 'Persisting DMP to DynamoDB');
+
     // Insert the RDA Common Standard metadata record into the DynamoDB table
-    await putItem(marshall(newVersionItem, {removeUndefinedValues: true}));
+    await putItem(
+      dynamoConnectionParams,
+      marshall(newVersionItem, { removeUndefinedValues: true })
+    );
 
     // Create the DMP Tool extensions metadata record. We ALWAYS do this even if
     // the caller does not want them returned
-    await createDMPExtensions(dmpId, dmptoolExtension as DMPToolExtensionType, version);
+    await createDMPExtensions(
+      dynamoConnectionParams,
+      dmpId,
+      dmptoolExtension as DMPToolExtensionType, version
+    );
 
     // Fetch the complete DMP metadata record including the RDA Common Standard
     // and the DMP Tool extensions
-    return (await getDMPs(dmpId, DMP_LATEST_VERSION, includeExtensions))[0];
+    return (await getDMPs(
+      dynamoConnectionParams,
+      domainName,
+      dmpId,
+      DMP_LATEST_VERSION,
+      includeExtensions
+    ))[0];
   } catch (err) {
     // If it was a DMPToolDynamoError that bubbled up, just throw it
     if (err instanceof DMPToolDynamoError) throw err;
+
+    const errMsg: string = toErrorMessage(err);
+    dynamoConnectionParams.logger.fatal({ dmpId, version, includeExtensions }, errMsg);
     throw new DMPToolDynamoError(
-      `Unable to create DMP id: ${dmpId}, ver: ${version} - ${toErrorMessage(err)}`
+      `Unable to create DMP id: ${dmpId}, ver: ${version} - ${errMsg}`
     );
   }
 }
@@ -396,26 +476,37 @@ export const createDMP = async (
 /**
  * Create a new DMP Extensions metadata record
  *
- * @param dmpId
- * @param dmp
+ * @param dynamoConnectionParams The DynamoDB connection parameters
+ * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
+ * @param dmp The DMP Tool extensions metadata record
  * @param version The version of the DMP metadata record to persist
  * (e.g. '2026-11-01T13:08:19Z').
  * If not provided, the latest version will be used. Defaults to DMP_LATEST_VERSION.
  * @returns The persisted DMP Tool extensions metadata record.
  */
 const createDMPExtensions = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   dmpId: string,
   dmp: DMPToolExtensionType,
   version = DMP_LATEST_VERSION
 ): Promise<void> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0 || !dmp) {
+    throw new DMPToolDynamoError('Missing Dynamo config, DMP ID or DMP metadata record');
+  }
+
   const newExtensionItem: DynamoExtensionItemType = {
     ...dmp,
     PK: dmpIdToPK(dmpId),
     SK: versionToExtensionSK(version),
   }
 
+  dynamoConnectionParams.logger.debug({ dmpId, version }, 'Persisting DMP Extensions to DynamoDB');
+
   // Insert the DMP Tool Extensions metadata record into the DynamoDB table
-  await putItem(marshall(newExtensionItem, { removeUndefinedValues: true }));
+  await putItem(
+    dynamoConnectionParams,
+    marshall(newExtensionItem, { removeUndefinedValues: true })
+  );
 }
 
 /**
@@ -433,7 +524,10 @@ const createDMPExtensions = async (
  * If a snapshot is made, the timestamp and link to retrieve it will appear
  * in the `versions` array
  *
- * @param dmp
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param domainName The domain name of the DMPTool instance (e.g. 'dmptool.org')
+ * @param dmp The DMP metadata record to persist as either an RDA Common Standard
+ * or the standard with DMP Tool specific extensions.
  * @param includeExtensions Whether or not to include the DMP Tool specific
  * extensions in the returned record. Defaults to true.
  * @returns The persisted DMP metadata record as an RDA Common Standard DMP
@@ -441,13 +535,16 @@ const createDMPExtensions = async (
  * @throws DMPToolDynamoError if the record could not be persisted
  */
 export const updateDMP = async (
+  dynamoConnectionParams: DynamoConnectionParams,
+  domainName: string,
   dmp: DMPToolDMPType,
-  includeExtensions = true
+  includeExtensions = true,
+  gracePeriodInMS = 7200000 // 2 hours in milliseconds
 ): Promise<DMPToolDMPType> => {
   const dmpId: string = dmp.dmp?.dmp_id?.identifier;
 
-  if (!dmp || !dmpId) {
-    throw new DMPToolDynamoError('Missing DMP ID or DMP metadata record');
+  if (!dynamoConnectionParams || !dmp || !dmpId) {
+    throw new DMPToolDynamoError('Missing Dynamo config, DMP ID or DMP metadata record');
   }
 
   try {
@@ -463,7 +560,13 @@ export const updateDMP = async (
 
     // Fetch the current latest version of the plan's maDMP record. Always get
     // the extensions because we need to check the provenance
-    const latest: DMPToolDMPType = (await getDMPs(dmpId, DMP_LATEST_VERSION, true))[0];
+    const latest: DMPToolDMPType = (await getDMPs(
+      dynamoConnectionParams,
+      domainName,
+      dmpId,
+      DMP_LATEST_VERSION,
+      true
+    ))[0];
 
     // Bail if there is no latest version (it has never been created yet or its tombstoned)
     // Or if the incoming modified timestamp is newer than the latest version's
@@ -478,19 +581,28 @@ export const updateDMP = async (
 
     const lastModified = new Date(latest.dmp?.modified).getTime();
     const now = Date.now();
-    const gracePeriod = process.env.VERSION_GRACE_PERIOD
-      ? Number(process.env.VERSION_GRACE_PERIOD)
-      : 7200000; // 2 hours in milliseconds
+    const gracePeriod = gracePeriodInMS ? Number(gracePeriodInMS) : 7200000;
 
     // We need to version the DMP if the provenance doesn't match or the modified
     // timestamp is older than 2 hours ago
     const needToVersion: boolean = dmptoolExtension.provenance !== latest.dmp.provenance
       || (now - lastModified) > gracePeriod;
 
+    dynamoConnectionParams.logger.debug(
+      { dmpId, lastModified, now, gracePeriod, needToVersion },
+      'Determining if we need to version the DMP'
+    );
+
     // If it was determined that we need to version the DMP, then create a new snapshot
     // using the modified date of the current latest version
     if (needToVersion) {
-      await createDMP(dmpId, latest.dmp, latest.dmp.modified);
+      await createDMP(
+        dynamoConnectionParams,
+        domainName,
+        dmpId,
+        latest.dmp,
+        latest.dmp.modified
+      );
     }
 
     // Updates can only ever occur on the latest version of the DMP (the Plan logic
@@ -502,21 +614,37 @@ export const updateDMP = async (
       SK: versionToSK(DMP_LATEST_VERSION),
     }
 
+    dynamoConnectionParams.logger.debug({ dmpId, versionItem }, 'Persisting DMP to DynamoDB');
     // Insert the RDA Common Standard metadata record into the DynamoDB table
-    await putItem(marshall(versionItem, { removeUndefinedValues: true }));
+    await putItem(
+      dynamoConnectionParams,
+      marshall(versionItem, { removeUndefinedValues: true })
+    );
 
     // Update the DMP Tool extensions metadata record. We ALWAYS do this even if
     // the caller does not want them returned
-    await updateDMPExtensions(dmpId, dmptoolExtension as DMPToolExtensionType);
+    await updateDMPExtensions(
+      dynamoConnectionParams,
+      dmpId,
+      dmptoolExtension as DMPToolExtensionType
+    );
 
     // Fetch the complete DMP metadata record including the RDA Common Standard
     // and the DMP Tool extensions
-    return (await getDMPs(dmpId, DMP_LATEST_VERSION, includeExtensions))[0];
+    return (await getDMPs(
+      dynamoConnectionParams,
+      domainName,
+      dmpId,
+      DMP_LATEST_VERSION,
+      includeExtensions)
+    )[0];
   } catch (err) {
     // If it was a DMPToolDynamoError that bubbled up, just throw it
     if (err instanceof DMPToolDynamoError) throw err;
+    const errMsg: string = toErrorMessage(err);
+    dynamoConnectionParams.logger.fatal({ dmpId, includeExtensions, errMsg }, 'Unable to update DMP -');
     throw new DMPToolDynamoError(
-      `Unable to create DMP id: ${dmpId}, ver: ${DMP_LATEST_VERSION} - ${toErrorMessage(err)}`
+      `Unable to update DMP id: ${dmpId}, ver: ${DMP_LATEST_VERSION} - ${errMsg}`
     );
   }
 }
@@ -525,14 +653,20 @@ export const updateDMP = async (
  * Update the specified DMP Extensions metadata record
  * We always update the latest version of the DMP metadata record. Historical versions are immutable.
  *
- * @param dmpId
+ * @param dynamoConnectionParams The DynamoDB connection parameters
+ * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
  * @param dmp
  * @returns The persisted DMP Tool extensions metadata record.
  */
 const updateDMPExtensions = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   dmpId: string,
   dmp: DMPToolExtensionType
 ): Promise<void> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0 || !dmp) {
+    throw new DMPToolDynamoError('Missing Dynamo config, DMP ID or DMP metadata record');
+  }
+
   // Updates can only ever occur on the latest version of the DMP (the Plan logic
   // should handle creating a snapshot of the original version of the DMP when appropriate)
   const extensionItem: DynamoExtensionItemType = {
@@ -541,13 +675,19 @@ const updateDMPExtensions = async (
     SK: versionToExtensionSK(DMP_LATEST_VERSION),
   }
 
-  await putItem(marshall(extensionItem, { removeUndefinedValues: true }));
+  dynamoConnectionParams.logger.debug({ dmpId }, 'Persisting DMP Extensions to DynamoDB');
+  await putItem(
+    dynamoConnectionParams,
+    marshall(extensionItem, { removeUndefinedValues: true })
+  );
 }
 
 /**
  * Create a Tombstone for the specified DMP metadata record
  * (registered/published DMPs only!)
  *
+ * @param dynamoConnectionParams The DynamoDB connection parameters
+ * @param domainName The domain name of the DMPTool instance (e.g. 'dmptool.org')
  * @param dmpId The DMP ID (e.g. '11.12345/A1B2C3')
  * @param includeExtensions Whether or not to include the DMP Tool specific
  * extensions in the returned record. Defaults to true.
@@ -556,13 +696,26 @@ const updateDMPExtensions = async (
  * @throws DMPToolDynamoError if a tombstone could not be created
  */
 export const tombstoneDMP = async (
+  dynamoConnectionParams: DynamoConnectionParams,
+  domainName: string,
   dmpId: string,
   includeExtensions = true
 ): Promise<DMPToolDMPType> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0) {
+    throw new DMPToolDynamoError('Missing Dynamo config or DMP ID');
+  }
+
   // Get the latest version of the DMP including the extensions because we need
   // to check the registered status
-  const dmp: DMPToolDMPType = (await getDMPs(dmpId, DMP_LATEST_VERSION, true))[0];
+  const dmp: DMPToolDMPType = (await getDMPs(
+    dynamoConnectionParams,
+    domainName,
+    dmpId,
+    DMP_LATEST_VERSION,
+    true)
+  )[0];
   if (!dmp) {
+    dynamoConnectionParams.logger.error({ dmpId }, 'Unable to find current latest version of the DMP');
     throw new DMPToolDynamoError(`Unable to find DMP id: ${dmpId}, ver: ${DMP_LATEST_VERSION}`);
   }
 
@@ -580,6 +733,7 @@ export const tombstoneDMP = async (
 
     const now: string | null = convertMySQLDateTimeToRFC3339(new Date());
     if (isNullOrUndefined(now)) {
+      dynamoConnectionParams.logger.error({ dmpId }, 'Unable to create modified date');
       throw new DMPToolDynamoError('Unable to create modified date');
     }
 
@@ -593,26 +747,46 @@ export const tombstoneDMP = async (
 
     try {
       // Update the RDA Common Standard metadata record
-      await putItem(marshall(versionItem, {removeUndefinedValues: true}));
-      await deleteItem({
-        PK: { S: dmpIdToPK(dmpId) },
-        SK: { S: versionToSK(DMP_LATEST_VERSION) }
-      });
+      await putItem(
+        dynamoConnectionParams,
+        marshall(versionItem, {removeUndefinedValues: true})
+      );
+      await deleteItem(
+        dynamoConnectionParams,
+        {
+          PK: { S: dmpIdToPK(dmpId) },
+          SK: { S: versionToSK(DMP_LATEST_VERSION) }
+        }
+      );
 
       // Tombstone the DMP Tool Extensions metadata record. We ALWAYS do this even
       // if the caller does not want them returned
-      await tombstoneDMPExtensions(dmpId, dmptoolExtension as DMPToolExtensionType);
+      await tombstoneDMPExtensions(
+        dynamoConnectionParams,
+        dmpId,
+        dmptoolExtension as DMPToolExtensionType
+      );
 
       // Fetch the complete DMP metadata record including the RDA Common Standard
       // and the DMP Tool extensions
-      return (await getDMPs(dmpId, DMP_TOMBSTONE_VERSION, includeExtensions))[0];
+      return (await getDMPs(
+        dynamoConnectionParams,
+        domainName,
+        dmpId,
+        DMP_TOMBSTONE_VERSION,
+        includeExtensions)
+      )[0];
     } catch (err) {
       if (err instanceof DMPToolDynamoError) throw err;
+
+      const errMsg: string = toErrorMessage(err);
+      dynamoConnectionParams.logger.fatal({ dmpId, errMsg }, 'Unable to tombstone DMP');
       throw new DMPToolDynamoError(
-        `Unable to tombstone id: ${dmpId}, ver: ${DMP_LATEST_VERSION} - ${toErrorMessage(err)}`
+        `Unable to tombstone id: ${dmpId}, ver: ${DMP_LATEST_VERSION} - ${errMsg}`
       );
     }
   } else {
+    dynamoConnectionParams.logger.warn({ dmpId }, 'Unable to tombstone an unregistered DMP');
     throw new DMPToolDynamoError(
       `Unable to tombstone DMP id: ${dmpId} because it is not registered/published`
     );
@@ -623,16 +797,23 @@ export const tombstoneDMP = async (
  * Add a tombstone date to the specified DMP Extensions metadata record
  * (registered/published DMPs only!)
  *
+ * @param dynamoConnectionParams The DynamoDB connection parameters
  * @param dmpId The DMP ID (e.g. '11.12345/A1B2C3')
  * @param dmp The DMP Tool specific extensions record to update.
  * @throws DMPToolDynamoError if the tombstone date could not be added
  */
 const tombstoneDMPExtensions = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   dmpId: string,
   dmp: DMPToolExtensionType
 ): Promise<void> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0 || !dmp) {
+    throw new DMPToolDynamoError('Missing Dynamo config, DMP ID or DMP metadata record');
+  }
+
   const now = convertMySQLDateTimeToRFC3339(new Date());
   if (!now) {
+    dynamoConnectionParams.logger.error({ dmpId }, 'Unable to create tombstone date');
     throw new DMPToolDynamoError('Unable to create tombstone date');
   }
 
@@ -643,19 +824,28 @@ const tombstoneDMPExtensions = async (
     tombstoned: now
   }
 
+  dynamoConnectionParams.logger.debug({ dmpId }, 'Tombstoning DMP Extensions in DynamoDB');
   // Update the DMP Tool Extensions metadata record
-  await putItem(marshall(extensionItem, { removeUndefinedValues: true }));
+  await putItem(
+    dynamoConnectionParams,
+    marshall(extensionItem, { removeUndefinedValues: true })
+  );
   // Then delete the old latest version
-  await deleteItem({
-    PK: { S: dmpIdToPK(dmpId) },
-    SK: { S: versionToExtensionSK(DMP_LATEST_VERSION) }
-  });
+  await deleteItem(
+    dynamoConnectionParams,
+    {
+      PK: { S: dmpIdToPK(dmpId) },
+      SK: { S: versionToExtensionSK(DMP_LATEST_VERSION) }
+    }
+  );
 }
 
 /**
  * Delete the specified DMP metadata record and any associated DMP Tool extension records.
  * This will NOT work on DMPs that have been registered/published.
  *
+ * @param dynamoConnectionParams The DynamoDB connection parameters
+ * @param domainName The domain name of the DMPTool instance (e.g. 'dmptool.org')
  * @param dmpId The DMP ID (e.g. '11.12345/A1B2C3')
  * @param includeExtensions Whether or not to include the DMP Tool specific extensions
  * in the returned record. Defaults to true.
@@ -664,12 +854,24 @@ const tombstoneDMPExtensions = async (
  * @throws DMPToolDynamoError if the record could not be deleted
  */
 export const deleteDMP = async (
+  dynamoConnectionParams: DynamoConnectionParams,
+  domainName: string,
   dmpId: string,
   includeExtensions = true
 ): Promise<DMPToolDMPType> => {
+  if (!dynamoConnectionParams || !dmpId || dmpId.trim().length === 0) {
+    throw new DMPToolDynamoError('Missing Dynamo config or DMP ID');
+  }
+
   // Get the latest version of the DMP. Always get the extensions because we need
   // to check the registered status
-  const dmps: DMPToolDMPType[] = await getDMPs(dmpId, DMP_LATEST_VERSION, true);
+  const dmps: DMPToolDMPType[] = await getDMPs(
+    dynamoConnectionParams,
+    domainName,
+    dmpId,
+    DMP_LATEST_VERSION,
+    true
+  );
 
   if (Array.isArray(dmps) && dmps.length > 0) {
     const latest: DMPToolDMPType = dmps[0];
@@ -686,20 +888,29 @@ export const deleteDMP = async (
     // If the latest version was found, and it has NOT been registered/published
     if (latest && !latest.dmp.registered) {
       try {
+        dynamoConnectionParams.logger.debug({ dmpId }, 'Deleting DMP from DynamoDB');
+
         // Delete all records with that DMP ID
-        await deleteItem({PK: {S: dmpIdToPK(dmpId)}});
+        await deleteItem(
+          dynamoConnectionParams,
+          { PK: { S: dmpIdToPK(dmpId) } }
+        );
         return toReturn as DMPToolDMPType;
       } catch (err) {
+        const errMsg: string = toErrorMessage(err);
+        dynamoConnectionParams.logger.fatal({ dmpId, errMsg }, 'Unable to delete DMP');
         throw new DMPToolDynamoError(
-          `Unable to delete id: ${dmpId}, ver: ${DMP_LATEST_VERSION} - ${toErrorMessage(err)}`
+          `Unable to delete id: ${dmpId}, ver: ${DMP_LATEST_VERSION} - ${errMsg}`
         );
       }
     } else {
+      dynamoConnectionParams.logger.error({ dmpId }, 'Unable to delete an unregistered DMP');
       throw new DMPToolDynamoError(
         `Unable to delete id: ${dmpId} because it does not exist or is registered`
       );
     }
   } else {
+    dynamoConnectionParams.logger.error({ dmpId }, 'Unable to find current latest version of the DMP');
     throw new DMPToolDynamoError(
       `Unable to find id: ${dmpId}, ver: ${DMP_LATEST_VERSION}`
     );
@@ -708,8 +919,9 @@ export const deleteDMP = async (
 
 /**
  * Scan the specified DynamoDB table using the specified criteria
- * @param table
- * @param params
+ *
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param params the query parameters
  * @returns an array of DynamoDB items
  */
 // We're not currently using it, but did not want to remove it just in case
@@ -717,31 +929,49 @@ export const deleteDMP = async (
 //
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const scanTable = async (
-  table: string,
+  dynamoConnectionParams: DynamoConnectionParams,
   params: object
 ): Promise<DynamoVersionItemType[] | DynamoExtensionItemType[] | []> => {
+  if (!dynamoConnectionParams || !params) {
+    throw new DMPToolDynamoError('Missing Dynamo config or params');
+  }
+
   let items: DynamoVersionItemType[] | DynamoExtensionItemType[] = [];
   let lastEvaluatedKey;
 
   // Query the DynamoDB index table for all DMP metadata (with pagination)
   do {
     const command: ScanCommand = new ScanCommand({
-      TableName: table,
+      TableName: dynamoConnectionParams.tableName,
       ExclusiveStartKey: lastEvaluatedKey,
       ConsistentRead: false,
       ReturnConsumedCapacity: 'TOTAL',
       ...params
     });
 
-    const response: ScanCommandOutput = await dynamoDBClient.send(command);
+    try {
+      const dynamoDBClient = getDynamoDBClient(dynamoConnectionParams);
+      dynamoConnectionParams.logger.debug(
+        { table: dynamoConnectionParams.tableName, params },
+        'Scanning DynamoDB table'
+      );
+      const response: ScanCommandOutput = await dynamoDBClient.send(command);
 
-    // Collect items and update the pagination key
-    items = items.concat(
-      response.Items as DynamoVersionItemType[] | DynamoExtensionItemType[] || []
-    );
-    // LastEvaluatedKey is the position of the end cursor from the query that was just run
-    // when it is undefined, then the query reached the end of the results.
-    lastEvaluatedKey = response?.LastEvaluatedKey;
+      // Collect items and update the pagination key
+      items = items.concat(
+        response.Items as DynamoVersionItemType[] | DynamoExtensionItemType[] || []
+      );
+      // LastEvaluatedKey is the position of the end cursor from the query that was just run
+      // when it is undefined, then the query reached the end of the results.
+      lastEvaluatedKey = response?.LastEvaluatedKey;
+    } catch (error) {
+      const errMsg: string = toErrorMessage(error);
+      dynamoConnectionParams.logger.fatal(
+        { ...params, ...dynamoConnectionParams, errMsg },
+        'Unable to scan DynamoDB table'
+      );
+      throw new DMPToolDynamoError(`Unable to scan DynamoDB table - ${errMsg}`);
+    }
   } while (lastEvaluatedKey);
 
   // Deserialize and split items into multiple files if necessary
@@ -751,34 +981,40 @@ const scanTable = async (
 /**
  * Query the specified DynamoDB table using the specified criteria
  *
+ * @param dynamoConnectionParams the DynamoDB connection parameters
  * @param params
  * @returns an array of DynamoDB items
  */
 const queryTable = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   params: object = {}
 ): Promise<QueryCommandOutput> => {
   // Query the DynamoDB index table for all DMP metadata (with pagination)
   const command = new QueryCommand({
-    TableName: process.env.DYNAMODB_TABLE_NAME,
+    TableName: dynamoConnectionParams.tableName,
     ConsistentRead: false,
     ReturnConsumedCapacity: 'TOTAL',
     ...params
   });
 
+  const dynamoDBClient = getDynamoDBClient(dynamoConnectionParams);
   return await dynamoDBClient.send(command);
 }
 
 /**
  * Create/Update an item in the specified DynamoDB table
  *
- * @param item
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param item the item to insert/update
  */
 const putItem = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   item: Record<string, AttributeValue>
 ): Promise<void> => {
+  const dynamoDBClient = getDynamoDBClient(dynamoConnectionParams)
   // Delete the item from the DynamoDB table
   await dynamoDBClient.send(new PutItemCommand({
-    TableName: process.env.DYNAMO_TABLE_NAME,
+    TableName: dynamoConnectionParams.tableName,
     ReturnConsumedCapacity: 'TOTAL',
     Item: item
   }));
@@ -788,14 +1024,18 @@ const putItem = async (
 /**
  * Delete an item from the specified DynamoDB table
  *
- * @param key
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param key the partition (and sort key if applicable) of the item to delete
  */
 const deleteItem = async (
+  dynamoConnectionParams: DynamoConnectionParams,
   key: Record<string, AttributeValue>
 ): Promise<void> => {
+  const dynamoDBClient = getDynamoDBClient(dynamoConnectionParams)
+
   // Delete the item from the DynamoDB table
   await dynamoDBClient.send(new DeleteItemCommand({
-    TableName: process.env.DYNAMO_TABLE_NAME,
+    TableName: dynamoConnectionParams.tableName,
     ReturnConsumedCapacity: 'TOTAL',
     Key: key
   }));

@@ -1,32 +1,45 @@
-const mockSSMCommand = jest.fn();
-
-jest.mock('@aws-sdk/client-ssm', () => ({
-  SSMClient: jest.fn(() => ({
-    send: mockSSMCommand,
-  })),
-  GetParameterCommand: jest.fn(),
-}));
-
+import { EnvironmentEnum } from '../general';
+import pino, { Logger } from 'pino';
 import { getSSMParameter } from '../ssm';
+import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+import { mockClient } from "aws-sdk-client-mock";
 
-beforeEach(() => {
-  jest.resetAllMocks();
-})
+const ssmMock = mockClient(SSMClient);
+const mockLogger: Logger = pino({ level: 'silent' });
 
 describe('getSSMParameter', () => {
-  it('raises errors', async () => {
-    mockSSMCommand.mockImplementation(() => { throw new Error('Test SSM error') });
-
-    await expect(getSSMParameter('/test/param')).rejects.toThrow('Test SSM error');
+  beforeEach(() => {
+    ssmMock.reset();
   });
 
-  it('it returns undefined if no key is specified', async () => {
-    expect(await getSSMParameter('  ')).toEqual(undefined);
+  it('returns the parameter value on success', async () => {
+    ssmMock.on(GetParameterCommand).resolves({
+      Parameter: { Value: 'Testing' }
+    });
+
+    const result = await getSSMParameter(
+      mockLogger,
+      'my-key',
+      EnvironmentEnum.DEV
+    );
+
+    expect(result).toEqual('Testing');
   });
 
-  it('it returns the list of objects', async () => {
-    mockSSMCommand.mockResolvedValue({ Parameter: { Name: '/test/param', Value: 'Testing' } });
+  it('returns undefined and logs error on failure', async () => {
+    ssmMock.on(GetParameterCommand).rejects(new Error('AWS Error'));
 
-    expect(await getSSMParameter('/test/param')).toEqual('Testing');
+    const result = await getSSMParameter(
+      mockLogger,
+      'my-key',
+      EnvironmentEnum.DEV
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined if no key is specified', async () => {
+    const result = await getSSMParameter(mockLogger, '', EnvironmentEnum.DEV);
+    expect(result).toBeUndefined();
   });
 });

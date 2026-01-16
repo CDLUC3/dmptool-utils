@@ -1,4 +1,13 @@
 /**
+ * Possible environments for the application.
+ */
+export enum EnvironmentEnum {
+  DEV = 'dev',
+  STG = 'stg',
+  PRD = 'prd'
+}
+
+/**
  * Convert an error to a string
  *
  * @param error the error to convert

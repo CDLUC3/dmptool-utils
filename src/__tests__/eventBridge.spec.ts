@@ -1,8 +1,12 @@
+import pino, { Logger } from 'pino';
 import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { mockClient } from "aws-sdk-client-mock";
 import { putEvent } from "../eventBridge";
 
 const ebMock = mockClient(EventBridgeClient);
+
+const mockLogger: Logger = pino({ level: 'silent' });
+const mockBusName = 'test-bus';
 
 describe("SNS Module", () => {
   beforeEach(() => {
@@ -16,8 +20,6 @@ describe("SNS Module", () => {
 
     const testEventId = '843gt38t-45gt425qgt-354gt4gt4tg-345gt45gt';
 
-    process.env.EVENTBRIDGE_BUS_NAME = 'test-bus'
-
     it("should successfully put an event", async () => {
       ebMock.on(PutEventsCommand).resolves({
         Entries: [{ EventId: testEventId }],
@@ -26,7 +28,13 @@ describe("SNS Module", () => {
         },
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result).toEqual({
         status: 200,
@@ -43,7 +51,13 @@ describe("SNS Module", () => {
         },
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result).toEqual({
         status: 200,
@@ -60,7 +74,13 @@ describe("SNS Module", () => {
         },
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result.status).toBe(200);
       expect(result.message).toBe("Ok");
@@ -75,7 +95,13 @@ describe("SNS Module", () => {
         },
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result.status).toBe(400);
       expect(result.message).toBe("Failure");
@@ -90,7 +116,13 @@ describe("SNS Module", () => {
         },
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result.status).toBe(500);
       expect(result.message).toBe("Failure");
@@ -103,7 +135,13 @@ describe("SNS Module", () => {
         $metadata: {},
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result.status).toBe(500);
       expect(result.message).toBe("Failure");
@@ -118,7 +156,13 @@ describe("SNS Module", () => {
         },
       });
 
-      await putEvent(testSource, testDetailType, testDetail);
+      await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(ebMock.calls()).toHaveLength(1);
       const call = ebMock.call(0);
@@ -127,7 +171,7 @@ describe("SNS Module", () => {
           Source: testSource,
           DetailType: testDetailType,
           Detail: JSON.stringify(testDetail),
-          EventBusName: process.env.EVENTBRIDGE_BUS_NAME,
+          EventBusName: 'test-bus',
         }]
       });
     });
@@ -140,7 +184,13 @@ describe("SNS Module", () => {
         },
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result.status).toBe(300);
       expect(result.message).toBe("Ok");
@@ -155,30 +205,17 @@ describe("SNS Module", () => {
         },
       });
 
-      const result = await putEvent(testSource, testDetailType, testDetail);
+      const result = await putEvent(
+        mockLogger,
+        mockBusName,
+        testSource,
+        testDetailType,
+        testDetail
+      );
 
       expect(result.status).toBe(301);
       expect(result.message).toBe("Failure");
       expect(result.eventId).toBe(testEventId);
-    });
-
-    it("should fail if the EVENTBRIDGE_BUS_NAME is not defined", async () => {
-      delete process.env.EVENTBRIDGE_BUS_NAME;
-
-      ebMock.on(PutEventsCommand).resolves({
-        Entries: [{ EventId: testEventId }],
-        $metadata: {
-          httpStatusCode: 200,
-        },
-      });
-
-      const result = await putEvent(testSource, testDetailType, testDetail);
-
-      expect(result).toEqual({
-        status: 500,
-        message: "Failure: Missing EVENTBRIDGE_BUS_NAME variable!",
-        eventId: undefined,
-      });
     });
   });
 });

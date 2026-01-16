@@ -1,3 +1,4 @@
+import pino, { Logger } from 'pino';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DMPToolDMPType } from "@dmptool/types";
 import {
@@ -18,7 +19,17 @@ import {
   deleteDMP
 } from '../dynamo';
 
+const mockLogger: Logger = pino({ level: 'silent' });
+const mockDomain = 'example.com';
+
 const dynamoMock = mockClient(DynamoDBClient);
+
+const mockConfig = {
+  tableName: 'test-table',
+  maxAttempts: 3,
+  region: 'us-west-2',
+  logger: mockLogger,
+};
 
 describe('DMPExists', () => {
   beforeEach(() => {
@@ -35,7 +46,7 @@ describe('DMPExists', () => {
       }],
     });
 
-    const result = await DMPExists(mockDmpId);
+    const result = await DMPExists(mockConfig, mockDmpId);
 
     expect(result).toBe(true);
     expect(dynamoMock.calls()).toHaveLength(1);
@@ -48,7 +59,7 @@ describe('DMPExists', () => {
       Items: [],
     });
 
-    const result = await DMPExists(mockDmpId);
+    const result = await DMPExists(mockConfig, mockDmpId);
 
     expect(result).toBe(false);
     expect(dynamoMock.calls()).toHaveLength(1);
@@ -60,7 +71,7 @@ describe('DMPExists', () => {
 
     dynamoMock.on(QueryCommand).rejects(new Error(errorMessage));
 
-    await expect(DMPExists(mockDmpId)).rejects.toThrow(errorMessage);
+    await expect(DMPExists(mockConfig, mockDmpId)).rejects.toThrow(errorMessage);
     expect(dynamoMock.calls()).toHaveLength(1);
   });
 });
@@ -93,7 +104,7 @@ describe('getDMPVersions', () => {
       ],
     });
 
-    const result = await getDMPVersions(mockDmpId);
+    const result = await getDMPVersions(mockConfig, mockDmpId);
 
     expect(result).toHaveLength(3);
     expect(dynamoMock.calls()).toHaveLength(1);
@@ -106,7 +117,7 @@ describe('getDMPVersions', () => {
       Items: [],
     });
 
-    const result = await getDMPVersions(mockDmpId);
+    const result = await getDMPVersions(mockConfig, mockDmpId);
 
     expect(result).toEqual([]);
     expect(dynamoMock.calls()).toHaveLength(1);
@@ -118,7 +129,7 @@ describe('getDMPVersions', () => {
 
     dynamoMock.on(QueryCommand).rejects(new Error(errorMessage));
 
-    await expect(getDMPVersions(mockDmpId)).rejects.toThrow(errorMessage);
+    await expect(getDMPVersions(mockConfig, mockDmpId)).rejects.toThrow(errorMessage);
     expect(dynamoMock.calls()).toHaveLength(1);
   });
 });
@@ -174,16 +185,21 @@ describe('getDMPs', () => {
         ]
       });
 
-    const result: DMPToolDMPType[] = await getDMPs(mockDmpId, mockVersion);
+    const result: DMPToolDMPType[] = await getDMPs(
+      mockConfig,
+      mockDomain,
+      mockDmpId,
+      mockVersion
+    );
 
     expect(result).toBeDefined();
     expect(result[0]?.dmp?.dmp_id?.identifier).toEqual(`https://${mockDmpId}`);
     expect(result[0]?.dmp?.featured).toEqual('yes');
     expect(result[0]?.dmp?.version.length).toEqual(2);
     expect(result[0]?.dmp?.version[0].version).toEqual('2025-01-01T00:00:00Z');
-    expect(result[0]?.dmp?.version[0].access_url).toEqual(`https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}`);
+    expect(result[0]?.dmp?.version[0].access_url).toEqual(`https://${mockDomain}/dmps/${mockDmpId}`);
     expect(result[0]?.dmp?.version[1].version).toEqual('2024-11-21T12:00:00Z');
-    expect(result[0]?.dmp?.version[1].access_url).toEqual(`https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}?version=2024-11-21T12:00:00Z`);
+    expect(result[0]?.dmp?.version[1].access_url).toEqual(`https://${mockDomain}/dmps/${mockDmpId}?version=2024-11-21T12:00:00Z`);
 
     expect(dynamoMock.calls()).toHaveLength(3);
     const firstCall: any = dynamoMock.call(0);
@@ -234,7 +250,12 @@ describe('getDMPs', () => {
         ]
       });
 
-    const result: DMPToolDMPType[] = await getDMPs(mockDmpId, null);
+    const result: DMPToolDMPType[] = await getDMPs(
+      mockConfig,
+      mockDomain,
+      mockDmpId,
+      null
+    );
 
     expect(result).toBeDefined();
     // Make sure it has data from the RDA Common Standard metadata in the `SK: VERSION#???` DynamoDB item
@@ -260,7 +281,12 @@ describe('getDMPs', () => {
       Items: undefined,
     });
 
-    const result: DMPToolDMPType[] = await getDMPs(mockDmpId, mockVersion);
+    const result: DMPToolDMPType[] = await getDMPs(
+      mockConfig,
+      mockDomain,
+      mockDmpId,
+      mockVersion
+    );
 
     expect(result).toEqual([]);
     expect(dynamoMock.calls()).toHaveLength(1);
@@ -273,7 +299,7 @@ describe('getDMPs', () => {
 
     dynamoMock.on(QueryCommand).rejects(new Error(errorMessage));
 
-    await expect(getDMPs(mockDmpId, mockVersion)).rejects.toThrow(errorMessage);
+    await expect(getDMPs(mockConfig, mockDomain, mockDmpId, mockVersion)).rejects.toThrow(errorMessage);
     expect(dynamoMock.calls()).toHaveLength(1);
   });
 });
@@ -300,7 +326,7 @@ describe('createDMP', () => {
       privacy: 'public',
       status: 'complete',
       version: [{
-        access_url: `https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}`,
+        access_url: `https://${mockDomain}/dmps/${mockDmpId}`,
         version: mockVersion,
       }]
     }
@@ -352,7 +378,13 @@ describe('createDMP', () => {
         ]
       });
 
-    const result = await createDMP(mockDmpId, mockDMP, mockVersion);
+    const result = await createDMP(
+      mockConfig,
+      mockDomain,
+      mockDmpId,
+      mockDMP,
+      mockVersion
+    );
 
     expect(result).toEqual(mockDMP);
     expect(dynamoMock.calls()).toHaveLength(6);
@@ -379,7 +411,7 @@ describe('createDMP', () => {
     // Call to DMPExists returns true
     dynamoMock.on(QueryCommand).resolvesOnce({ Items: [ { PK: { S: `DMP#${mockDmpId}` } }] });
 
-    await expect(createDMP(mockDmpId, mockDMP, mockVersion)).rejects.toThrow();
+    await expect(createDMP(mockConfig, mockDomain, mockDmpId, mockDMP, mockVersion)).rejects.toThrow();
   });
 
   it('should throw error when DynamoDB PutItem operation fails', async () => {
@@ -401,7 +433,7 @@ describe('createDMP', () => {
 
     dynamoMock.on(QueryCommand).resolvesOnce({ Items: [] });
 
-    await expect(createDMP(mockDmpId, mockDMP, mockVersion)).rejects.toThrow(errorMessage);
+    await expect(createDMP(mockConfig, mockDomain, mockDmpId, mockDMP, mockVersion)).rejects.toThrow(errorMessage);
     expect(dynamoMock.calls()).toHaveLength(2);
   });
 });
@@ -429,11 +461,11 @@ describe('updateDMP', () => {
       status: 'complete',
       version: [
         {
-          access_url: `https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}`,
+          access_url: `https://${mockDomain}/dmps/${mockDmpId}`,
           version: modifiedTstamp,
         },
         {
-          access_url: `https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}?version=2025-01-15T12:00:00Z`,
+          access_url: `https://${mockDomain}/dmps/${mockDmpId}?version=2025-01-15T12:00:00Z`,
           version: '2025-01-15T12:00:00Z',
         }
       ]
@@ -458,7 +490,7 @@ describe('updateDMP', () => {
         status: 'complete',
         version: [
           {
-            access_url: `https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}`,
+            access_url: `https://${mockDomain}/dmps/${mockDmpId}`,
             version: modifiedTstamp,
           }
         ]
@@ -543,7 +575,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    const result = await updateDMP(dmp);
+    const result = await updateDMP(mockConfig, mockDomain, dmp);
 
     expect(result).toEqual(dmp);
     expect(dynamoMock.calls()).toHaveLength(8);
@@ -692,7 +724,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    const result = await updateDMP(mockDMP);
+    const result = await updateDMP(mockConfig, mockDomain, mockDMP);
 
     expect(result).toEqual(mockDMP);
     expect(dynamoMock.calls()).toHaveLength(14);
@@ -859,7 +891,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    const result = await updateDMP(mockDMP);
+    const result = await updateDMP(mockConfig, mockDomain, mockDMP);
 
     expect(result).toEqual(mockDMP);
     expect(dynamoMock.calls()).toHaveLength(14);
@@ -907,7 +939,7 @@ describe('updateDMP', () => {
       // Call to getDMPExtensions
       .resolvesOnce({ Items: [] })
 
-    await expect(updateDMP(mockDMP)).rejects.toThrow();
+    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow();
   });
 
   it('doesn\'t allow updates if the DMP is tombstoned', async () => {
@@ -953,7 +985,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    await expect(updateDMP(mockDMP)).rejects.toThrow();
+    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow();
   });
 
   it('doesn\'t allow updates if the modified date is older than the current modified date', async () => {
@@ -1001,7 +1033,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    await expect(updateDMP(mockDMP)).rejects.toThrow();
+    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow();
   });
 
   it('should throw error when DynamoDB PutItem operation fails', async () => {
@@ -1049,7 +1081,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    await expect(updateDMP(mockDMP)).rejects.toThrow(errorMessage);
+    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow(errorMessage);
     expect(dynamoMock.calls()).toHaveLength(5);
   });
 });
@@ -1078,7 +1110,7 @@ describe('tombstoneDMP', () => {
       status: 'complete',
       tombstoned: newDate,
       version: [{
-        access_url: `https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}?version=${newDate}`,
+        access_url: `https://${mockDomain}/dmps/${mockDmpId}?version=${newDate}`,
         version: newDate
       }]
     }
@@ -1167,7 +1199,7 @@ describe('tombstoneDMP', () => {
         ]
       });
 
-    const result = await tombstoneDMP(mockDmpId);
+    const result = await tombstoneDMP(mockConfig, mockDomain, mockDmpId);
 
     expect(result).toEqual(mockDMP);
     expect(dynamoMock.calls()).toHaveLength(10);
@@ -1248,7 +1280,7 @@ describe('tombstoneDMP', () => {
         ]
       });
 
-    await expect(tombstoneDMP(mockDmpId)).rejects.toThrow();
+    await expect(tombstoneDMP(mockConfig, mockDomain, mockDmpId)).rejects.toThrow();
   });
 
   it('should not tombstone the DMP if it has no latest version', async () => {
@@ -1259,7 +1291,7 @@ describe('tombstoneDMP', () => {
       // Call to getDMPExtensions
       .resolvesOnce({ Items: [] })
 
-    await expect(tombstoneDMP(mockDmpId)).rejects.toThrow();
+    await expect(tombstoneDMP(mockConfig, mockDomain, mockDmpId)).rejects.toThrow();
   });
 
   it('should throw error when DynamoDB PutItem operation fails', async () => {
@@ -1307,7 +1339,7 @@ describe('tombstoneDMP', () => {
         ]
       });
 
-    await expect(tombstoneDMP(mockDmpId)).rejects.toThrow();
+    await expect(tombstoneDMP(mockConfig, mockDomain, mockDmpId)).rejects.toThrow();
   });
 });
 
@@ -1332,7 +1364,7 @@ describe('deleteDMP', () => {
       privacy: 'public',
       status: 'complete',
       version: [{
-        access_url: `https://${process.env.DOMAIN_NAME}/dmps/${mockDmpId}`,
+        access_url: `https://${mockDomain}/dmps/${mockDmpId}`,
         version: '2025-01-15T12:00:00Z'
       }]
     }
@@ -1380,7 +1412,7 @@ describe('deleteDMP', () => {
         ]
       });
 
-    const result = await deleteDMP(mockDmpId);
+    const result = await deleteDMP(mockConfig, mockDomain, mockDmpId);
 
     expect(result).toEqual(mockDMP);
     expect(dynamoMock.calls()).toHaveLength(4);
@@ -1434,7 +1466,7 @@ describe('deleteDMP', () => {
         ]
       });
 
-    await expect(deleteDMP(mockDmpId)).rejects.toThrow();
+    await expect(deleteDMP(mockConfig, mockDomain, mockDmpId)).rejects.toThrow();
   });
 
   it('should throw error when DynamoDB DeleteItem operation fails', async () => {
@@ -1482,6 +1514,6 @@ describe('deleteDMP', () => {
         ]
       });
 
-    await expect(deleteDMP(mockDmpId)).rejects.toThrow();
+    await expect(deleteDMP(mockConfig, mockDomain, mockDmpId)).rejects.toThrow();
   });
 });
