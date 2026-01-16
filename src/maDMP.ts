@@ -198,7 +198,7 @@ const loadPlanInfo = async (
   const sql = `
     SELECT id, dmpId, projectId, versionedTemplateId,
            createdById, created, modifiedById, modified, title,
-           status, visibility, featured, registeredBy, registered,
+           status, visibility, featured, registeredById, registered,
            languageId
     FROM plans
     WHERE id = ?
