@@ -61,14 +61,14 @@ Provides access to CloudFormation stack outputs.
 
 For example, our CloudFormation stack for the S3 buckets outputs the names of each bucket. This code allows a Lambda Function to access those bucket names.
 
-Environment variable requirements:
-- `AWS_REGION` The AWS region where the DynamoDB table is located
-
 ### Example usage
 ```typescript
-import { getExport } from '@dmptool/utils';
+import { getExport, initializeLogger, LogLevelEnum } from '@dmptool/utils';
 
-const tableName = await getExport('DynamoTableNames');
+// Initialize a logger
+const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
+
+const tableName = await getExport(logger, 'DynamoTableNames');
 console.log(tableName);
 ```
 
@@ -95,13 +95,6 @@ A DMP SK for a specific version of the DMP Tool extensions looks like this: `EXT
 
 These keys are attached to the DMP JSON when persisting it to DynamoDB and removed when returning it from DynamoDB.
 
-Environment variable requirements:
-- `AWS_REGION` The AWS region where the DynamoDB table is located
-- `DOMAIN_NAME` The domain name of the application
-- `DYNAMODB_TABLE_NAME` The name of the DynamoDB table
-- `DYNAMO_MAX_ATTEMPTS` The maximum number of times to retry a DynamoDB operation (defaults to 3)
-- `VERSION_GRACE_PERIOD` The number of seconds to wait before considering a change should generate a version snapshot (defaults to 7200000 => 2 hours)
-
 ## Example Usage:
 ```typescript
 import { DMPToolDMPType } from '@dmptool/types';
@@ -112,13 +105,23 @@ import {
   DMP_LATEST_VERSION,
   getDMPs,
   getDMPVersions,
+  initializeLogger,
+  LogLevelEnum,
   tombstoneDMP,
   updateDMP
 } from '@dmptool/utils';
 
-process.env.AWS_REGION = 'eu-west-1';
-process.env.DOMAIN_NAME = 'my-application.org';
-process.env.DYNAMODB_TABLE_NAME = 'my-dynamo-table';
+// Initialize a logger
+const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
+
+const dynamoConfig = {
+  logger,
+  region: 'us-west-2',
+  tableName: 'my-dynamo-table',
+  maxAttempts: 3
+}
+
+const gracePeriodInMS = 7200000;
 
 const dmpId = '123456789';
 
@@ -159,13 +162,13 @@ const dmpObj: DMPToolDMPType = {
 }
 
 // First make sure the DMP doesn't already exist
-const exists = await DMPExists(dmpId);
+const exists = await DMPExists(dynamoConfig, dmpId);
 if (exists) {
   console.log('DMP already exists');
 
 } else {
   // Create the DMP
-  const created: DMPToolDMPType = await createDMP(dmpId, dmpObj);
+  const created: DMPToolDMPType = await createDMP(dynamoConfig, domainName, dmpId, dmpObj);
   if (!created) { 
     console.log('Failed to create DMP');
   
@@ -174,17 +177,20 @@ if (exists) {
     dmpObj.dmp.modified = '2026-01-10T03:43:11Z';
 
     // Update the DMP
-    const updated: DMPToolDMPType = await updateDMP(dmpObj);
+    const updated: DMPToolDMPType = await updateDMP(dynamoConfig, domainName, dmpObj, gracePeriodInMS);
     if (!updated) { 
       console.log('Failed to update DMP');
       
     } else {
       // Fetch the DMP version timestamps (should only be two)
-      const versions = await getDMPVersions(dmpId);
+      const versions = await getDMPVersions(dynamoConfig, dmpId);
       console.log(versions);
       
-      // Fetch the latest version of the DMP
-      const latest = await getDMP(dmpId, DMP_LATEST_VERSION);
+      // Fetch the latest version of the DMP (RDA Common Standard with DMP Tool extensions)
+      const latest = await getDMPs(dynamoConfig, domainName, dmpId, DMP_LATEST_VERSION);
+      // Fetch the latest version of the DMP (RDA Common Standard only)
+      const rdaOnly = await getDMPs(dynamoConfig, domainName, dmpId, DMP_LATEST_VERSION, false);
+      
       if (!latest) { 
         console.log('Failed to fetch latest version of DMP');
         
@@ -192,11 +198,11 @@ if (exists) {
         // If the DMP has a `registered` timestamp then it is published and can be tombstoned not deleted
         // Since our example is not, we include this code here for reference only
         
-        // const tombstoned = await tombstoneDMP(dmpId);
+        // const tombstoned = await tombstoneDMP(dynamoConfig, domainName, dmpId);
         // console.log( tombstoned
         
         // Delete the DMP (can be done because the DMP is not published)
-        const deleted = await deleteDMP(dmpId);
+        const deleted = await deleteDMP(dynamoConfig, domainName, dmpId);
         console.log(deleted);
       }
     }
@@ -207,31 +213,30 @@ if (exists) {
 
 This code can be used to publish events to the EventBridge.
 
-Environment variable requirements:
-- `AWS_REGION` - The AWS region where the Lambda Function is running
-- `EVENTBRIDGE_BUS_NAME` - The ARN of the EventBridge Bus to publish events to
-
 ### Example usage
 ```typescript
-import { publishMessage } from '@dmptool/utils';
+import { initializeLogger, LogLevelEnum, publishMessage } from '@dmptool/utils';
 
-process.env.AWS_REGION = 'us-west-2';
+const region = 'us-west-2';
 
-const topicArn = 'arn:aws:sns:us-east-1:123456789012:my-topic';
+// Initialize a logger
+const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
+
+const busName = 'arn:aws:sns:us-east-1:123456789012:my-topic';
 
 // See the documentation for the AWS Lambda you are trying to invoke to determine what the
 // `detail-type` and `detail` payload should look like.
-const message = {
-  'detail-type': 'my-event',  
-  detail: {
-    property1: 'value1',
-    property2: 'value2'
-  }
-}
+const source = 'my-application';
+const detailType = 'my-event';  
+const detail = { property1: 'value1', property2: 'value2' }
 
 const response = await publishMessage(
-  message,
-  topicArn
+  logger,
+  busName,
+  source,
+  detailType,
+  detail,
+  region
 );
 
 if (response.statusCode === 200) {
@@ -330,12 +335,6 @@ Details about the RDA Common Metadata Standard can be found in the JSON examples
 
 **Current RDA Common Metadata Standard Version:** v1.2
 
-Environment variable requirements:
-- `AWS_REGION` - The AWS region where the Lambda Function is running
-- `ENV`: The AWS environment (e.g. `dev`, `stg`, `prd`)
-- `APPLICATION_NAME`: The name of your application (NO spaces!, this is used to construct identifier namespaces)
-- `DOMAIN_NAME`: The domain name of your application
-
 ### Notes
 
 **DMP IDs:**
@@ -366,15 +365,33 @@ The `narrative` property in the JSON object represents the Template, Sections, Q
 ### Example usage
 ```typescript
 import { DMPToolDMPType } from '@dmptool/types';
-import { planToDMPCommonStandard } from '@dmptool/utils';
+import { EnvironmentEnum, initializeLogger, LogLevelEnum, planToDMPCommonStandard } from '@dmptool/utils';
 
-process.env.AWS_REGION = 'us-west-2';
-process.env.ENV = 'stg';
-process.env.APPLICATION_NAME = 'your-application';
-process.env.DOMAIN_NAME = 'your-domain.com';
+const region = 'us-west-2';
+const env = EnvironmentEnum.DEV;
+const applicationName = 'your-application';
+const domainName = 'your-domain.com';
+
+// Initialize a logger
+const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
+
+const rdsConfig = {
+  logger,
+  host: 'some-rds-instance.us-east-1.rds.amazonaws.com',
+  port: 3306,
+  user: 'my_user',
+  password: 'open-sesame',
+  database: 'my_database'
+}
 
 const planId = '12345';
-const dmp: DMPToolDMPType = await planToDMPCommonStandard(planId);
+const dmp: DMPToolDMPType = await planToDMPCommonStandard(
+  rdsConfig,
+  applicationName,
+  domainName,
+  planId,
+  env
+);
 ```
 
 ## Example of a minimal JSON object:
@@ -674,28 +691,25 @@ This code can be used by to provide access to the RDS MySQL database.
 
 It provides a simple `queryTable` function which can be used to query a table. Similar to the way we do so within the Apollo server backend code.
 
-Environment variable requirements:
-- `AWS_REGION` - The AWS region where the Lambda Function is running
-- `RDS_HOST` The endpoint of the RDS instance
-- `RDS_PORT` The port (defaults to 3306)
-- `RDS_USER` The name of the user (defaults to "root")
-- `RDS_PASSWORD` The user's password
-- `RDS_DATABASE` The name of the database
-
 ### Example usage
 ```typescript
-import { queryTable } from '@dmptool/utils';
+import { initializeLogger, LogLevelEnum, queryTable } from '@dmptool/utils';
 
-process.env.AWS_REGION = 'us-west-2';
-process.env.RDS_HOST = 'some-rds-instance.us-east-1.rds.amazonaws.com';
-process.env.RDS_PORT = '3306';
-process.env.RDS_USER = 'my_user';
-process.env.RDS_PASSWORD = 'open-sesame';
-process.env.RDS_DATABASE = 'my_database';
+// Initialize a logger
+const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
+
+const config = {
+  logger,
+  host: 'some-rds-instance.us-east-1.rds.amazonaws.com',
+  port: 3306,
+  user: 'my_user',
+  password: 'open-sesame',
+  database: 'my_database',
+}
 
 const sql = 'SELECT * FROM some_table WHERE id = ?';
 const id = 1234;
-const resp = await queryTable(sql, [planId.toString()])
+const resp = await queryTable(config, sql, [planId.toString()])
 
 if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
   console.log('It worked!', resp.results[0]);
@@ -719,9 +733,9 @@ Environment variable requirements:
 
 ### Example usage
 ```typescript
-import { getObject, getPresignedURL, listBuckets, putObject } from '@dmptool/utils';
+import { getObject, getPresignedURL, initializeLogger, listBuckets, LogLevelEnum, putObject } from '@dmptool/utils';
 
-process.env.AWS_REGION = 'us-west-2';
+const region = 'us-west-2';
 
 const bucketName = 'my-bucket';
 const objectKey = 'my-object.txt';
@@ -729,31 +743,37 @@ const objectKey = 'my-object.txt';
 const fileName = 'my-file.json.gz'
 const gzippedData = zlib.gzipSync(JSON.stringify({ testing: { foo: 'bar' } }));
 
+// Initialize a logger
+const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
+
 // List the objects to verify that we're able to access the bucket)
-const s3Objects = await listObjects(bucketName, '');
+const s3Objects = await listObjects(logger, bucketName, '', region);
 console.log('Objects in bucket:', s3Objects);
 
 // First put the item into the bucket
 const response = await putObject(
+  logger,
   bucketName, 
   fileName, 
   gzippedData, 
-  'application/json', 'gzip'
+  'application/json', 
+  'gzip',
+  region
 );
 
 if (response) {
   console.log('Object uploaded successfully');
 
   // Get the object we just uploaded from the bucket
-  const object = await getObject(bucketName, objectKey);
+  const object = await getObject(logger, bucketName, objectKey, region);
   console.log('Object fetched from bucket:', object);
   
   // Generate a presigned URL to access the object from outside the VPC
-  const url = await getPresignedURL(bucketName, objectKey);
+  const url = await getPresignedURL(logger, bucketName, objectKey);
   console.log('Presigned URL to fetch the Object:', url);
   
   // Generate a presigned URL to put an object into the bucket from outside the VPC
-  const putURL = await getPresignedURL(bucketName, `2nd-${objectKey}`, true);
+  const putURL = await getPresignedURL(logger, bucketName, `2nd-${objectKey}`, true);
   console.log('Presigned URL to put a new the Object into the bucket', putURL);
 } else {
   console.log('Failed to upload object');
@@ -768,11 +788,11 @@ The code will use that value to construct the appropriate prefix for the key. Fo
 
 ### Example usage
 ```typescript
-import { logger, EnvironmentEnum, getSSMParameter, LogLevelEnum } from '@dmptool/utils';
+import {EnvironmentEnum, initializeLogger, getSSMParameter, LogLevelEnum } from '@dmptool/utils';
 
 process.env.AWS_REGION = 'us-west-2';
 
-// Initialize the logger
+// Initialize a logger
 const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
 
 const paramName = 'RdsDatabase';

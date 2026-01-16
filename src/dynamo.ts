@@ -528,6 +528,7 @@ const createDMPExtensions = async (
  * @param domainName The domain name of the DMPTool instance (e.g. 'dmptool.org')
  * @param dmp The DMP metadata record to persist as either an RDA Common Standard
  * or the standard with DMP Tool specific extensions.
+ * @param gracePeriodInMS The grace period in milliseconds to wait before creating
  * @param includeExtensions Whether or not to include the DMP Tool specific
  * extensions in the returned record. Defaults to true.
  * @returns The persisted DMP metadata record as an RDA Common Standard DMP
@@ -538,8 +539,8 @@ export const updateDMP = async (
   dynamoConnectionParams: DynamoConnectionParams,
   domainName: string,
   dmp: DMPToolDMPType,
-  includeExtensions = true,
-  gracePeriodInMS = 7200000 // 2 hours in milliseconds
+  gracePeriodInMS = 7200000, // 2 hours in milliseconds
+  includeExtensions = true
 ): Promise<DMPToolDMPType> => {
   const dmpId: string = dmp.dmp?.dmp_id?.identifier;
 

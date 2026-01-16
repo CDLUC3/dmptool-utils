@@ -10,8 +10,6 @@ import {
   ListObjectsV2CommandOutput,
 } from "@aws-sdk/client-s3";
 
-const s3Client = new S3Client({});
-
 export interface DMPToolListObjectsOutput {
   key: string;
   lastModified: Date;
@@ -24,15 +22,19 @@ export interface DMPToolListObjectsOutput {
  * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to list.
  * @param keyPrefix The prefix to filter the results by.
+ * @param region The region to generate the URL in. Defaults to 'us-west-2'.
  * @returns A list of objects that match the key prefix, or undefined if the
  * bucket or key prefix are invalid.
  */
 export const listObjects = async (
   logger: Logger,
   bucket: string,
-  keyPrefix: string
+  keyPrefix: string,
+  region = 'us-west-2'
 ): Promise<DMPToolListObjectsOutput[] | []> => {
   if (logger && bucket && bucket.trim() !== '') {
+    const s3Client = new S3Client({ region });
+
     try {
       const listObjectsCommand = new ListObjectsV2Command({
         Bucket: bucket,
@@ -70,15 +72,19 @@ export const listObjects = async (
  * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to get the object from.
  * @param key The key of the object to get.
+ * @param region The region to generate the URL in. Defaults to 'us-west-2'.
  * @returns The object, or undefined if the bucket or key are invalid.
  */
 export const getObject = async (
   logger: Logger,
   bucket: string,
-  key: string
+  key: string,
+  region = 'us-west-2'
 ): Promise<GetObjectCommandOutput | undefined> => {
   if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
     try {
+      const s3Client = new S3Client({ region });
+
       const command = new GetObjectCommand({ Bucket: bucket, Key: key });
       logger.debug({ bucket, key }, 'Getting object from bucket');
       return await s3Client.send(command);
@@ -99,6 +105,7 @@ export const getObject = async (
  * @param body The object to put.
  * @param contentType The content type of the object.
  * @param contentEncoding The content encoding of the object.
+ * @param region The region to generate the URL in. Defaults to 'us-west-2'.
  * @returns The response from the S3 putObject operation, or undefined if the
  * bucket or key are invalid.
  */
@@ -108,10 +115,13 @@ export const putObject = async (
   key: string,
   body: any,
   contentType = 'application/json',
-  contentEncoding = 'utf-8'
+  contentEncoding = 'utf-8',
+  region = 'us-west-2'
 ): Promise<PutObjectCommandOutput | undefined> => {
   if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
     try {
+      const s3Client = new S3Client({ region });
+
       const command = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
@@ -136,15 +146,19 @@ export const putObject = async (
  * @param bucket The name of the bucket to generate the URL for.
  * @param key The key of the object to generate the URL for.
  * @param usePutMethod Whether to use the PUT method for the URL. Defaults to false.
+ * @param region The region to generate the URL in. Defaults to 'us-west-2'.
  * @returns The Pre-signed URL, or undefined if the bucket or key are invalid.
  */
 export const getPresignedURL = async (
   logger: Logger,
   bucket: string,
   key: string,
-  usePutMethod = false
+  usePutMethod = false,
+  region = 'us-west-2'
 ): Promise<string | undefined> => {
   if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
+    const s3Client = new S3Client({ region });
+
     const params = { Bucket: bucket, Key: key };
     try {
       const command: GetObjectCommand | PutObjectCommand = usePutMethod
