@@ -444,7 +444,7 @@ const loadRelatedWorksInfo = async (
   projectId: number
 ): Promise<RDACommonStandardRelatedWork[] | []> => {
   const sql = `
-    SELECT w.doi AS identifier, LOWER(wv.workType) AS workType,
+    SELECT w.doi AS identifier, LOWER(wv.workType) AS workType
     FROM relatedWorks rw
       JOIN workVersions wv ON rw.workVersionId = wv.id
         JOIN works w ON wv.workId = w.id
