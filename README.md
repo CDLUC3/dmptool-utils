@@ -769,11 +769,11 @@ if (response) {
   console.log('Object fetched from bucket:', object);
   
   // Generate a presigned URL to access the object from outside the VPC
-  const url = await getPresignedURL(logger, bucketName, objectKey);
+  const url = await getPresignedURL(logger, bucketName, objectKey, false, region);
   console.log('Presigned URL to fetch the Object:', url);
   
   // Generate a presigned URL to put an object into the bucket from outside the VPC
-  const putURL = await getPresignedURL(logger, bucketName, `2nd-${objectKey}`, true);
+  const putURL = await getPresignedURL(logger, bucketName, `2nd-${objectKey}`, true, region);
   console.log('Presigned URL to put a new the Object into the bucket', putURL);
 } else {
   console.log('Failed to upload object');
