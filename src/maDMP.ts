@@ -328,7 +328,8 @@ const loadMemberInfo = async (
 ): Promise<LoadMemberInfo[] | []> => {
   const sql = `
     SELECT pc.id, a.uri, a.name, pctr.email, pctr.givenName, pctr.surName,
-           pctr.orcid, pc.isPrimaryContact, GROUP_CONCAT(r.uri) as roles
+           pctr.orcid, pc.isPrimaryContact,
+           CONCAT('["', GROUP_CONCAT(r.uri SEPARATOR '","'), '"]') as roles
     FROM planMembers pc
       LEFT JOIN planMemberRoles pcr ON pc.id = pcr.planMemberId
         LEFT JOIN memberRoles r ON pcr.memberRoleId = r.id
