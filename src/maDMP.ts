@@ -177,7 +177,7 @@ const loadDefaultMemberRole = async (
     []
   );
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
-    return resp.results[0].id;
+    return resp.results[0].uri;
   }
   return undefined;
 }
@@ -663,9 +663,7 @@ const buildContributors = (
 
   return members.map((member: LoadMemberInfo): RDACommonStandardContributor => {
     // Make sure that we always have roles as an array
-    const roles = member.roles && member.roles.includes('[')
-      ? JSON.parse(member.roles)
-      : [defaultRole];
+    const roles = member.roles ? JSON.parse(member.roles) : [defaultRole];
 
     // Combine the member's given name and surname into a single name'
     const contrib = {
