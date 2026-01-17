@@ -768,7 +768,7 @@ const buildDMPToolExtensions = async (
     // Define the Funder's project number if applicable. project_id and funder_id
     // are used to help tie the project_identifier to the correct
     // project[?].funding[?] in the RDA Common Standard.
-    if (funding.funderProjectNumber !== undefined) {
+    if (funding.funderProjectNumber) {
       funderProject = {
         project_id: projectId,
         funder_id: funderId,
@@ -784,7 +784,7 @@ const buildDMPToolExtensions = async (
     // Define the Funder's opportunity number if applicable. project_id and
     // funder_id are used to help tie the opportunity_identifier to the correct
     // project[?].funding[?] in the RDA Common Standard.
-    if (funding.funderOpportunityNumber !== undefined) {
+    if (funding.funderOpportunityNumber) {
       funderOpportunity = {
         project_id: projectId,
         funder_id: funderId,

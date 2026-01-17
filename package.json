@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
