@@ -575,7 +575,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    const result = await updateDMP(mockConfig, mockDomain, dmp);
+    const result = await updateDMP(mockConfig, mockDomain, mockDmpId, dmp);
 
     expect(result).toEqual(dmp);
     expect(dynamoMock.calls()).toHaveLength(8);
@@ -724,7 +724,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    const result = await updateDMP(mockConfig, mockDomain, mockDMP);
+    const result = await updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP);
 
     expect(result).toEqual(mockDMP);
     expect(dynamoMock.calls()).toHaveLength(14);
@@ -891,7 +891,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    const result = await updateDMP(mockConfig, mockDomain, mockDMP);
+    const result = await updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP);
 
     expect(result).toEqual(mockDMP);
     expect(dynamoMock.calls()).toHaveLength(14);
@@ -939,7 +939,7 @@ describe('updateDMP', () => {
       // Call to getDMPExtensions
       .resolvesOnce({ Items: [] })
 
-    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow();
+    await expect(updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP)).rejects.toThrow();
   });
 
   it('doesn\'t allow updates if the DMP is tombstoned', async () => {
@@ -985,7 +985,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow();
+    await expect(updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP)).rejects.toThrow();
   });
 
   it('doesn\'t allow updates if the modified date is older than the current modified date', async () => {
@@ -1033,7 +1033,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow();
+    await expect(updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP)).rejects.toThrow();
   });
 
   it('should throw error when DynamoDB PutItem operation fails', async () => {
@@ -1081,7 +1081,7 @@ describe('updateDMP', () => {
         ]
       });
 
-    await expect(updateDMP(mockConfig, mockDomain, mockDMP)).rejects.toThrow(errorMessage);
+    await expect(updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP)).rejects.toThrow(errorMessage);
     expect(dynamoMock.calls()).toHaveLength(5);
   });
 });
