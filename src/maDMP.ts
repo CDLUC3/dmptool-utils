@@ -34,8 +34,6 @@ import {
   DMPExtensionNarrative,
   LoadFundingInfo,
   LoadMemberInfo,
-  LoadNarrativeQuestionInfo,
-  LoadNarrativeSectionInfo,
   LoadPlanInfo,
   LoadProjectInfo,
   LoadRelatedWorkInfo,
@@ -513,73 +511,53 @@ const loadNarrativeTemplateInfo = async (
     results = resp.results.filter((row) => !isNullOrUndefined(row));
   }
 
-  if (!Array.isArray(results) || results.length === 0
-    || !Array.isArray(results[0].section) || results[0].section.length === 0) {
+  if (!Array.isArray(results) || results.length === 0) {
     return undefined;
   }
 
-  rdsConnectionParams.logger.debug(
-    {
-      planId,
-      nbrRsults: results.length,
-      sectionCount: results?.[0]?.section?.length,
-      questionCount: results?.[0]?.section?.[0]?.question?.length
-    },
-    'Loaded narrative information'
-  )
-
-  // Sort the questions by display order
-  results[0].section.forEach((section: LoadNarrativeSectionInfo) => {
-    section.question.sort((a, b) => a.questionOrder - b.questionOrder);
-  });
-  // Sort the sections by display order
-  results[0].section.sort((a: LoadNarrativeSectionInfo, b: LoadNarrativeSectionInfo) => {
-    return a.sectionOrder - b.sectionOrder;
-  });
-
-  return {
+  const narrative: DMPExtensionNarrative = {
     id: results[0].templateId,
     title: results[0].templateTitle,
-    description: results[0].templateDescription,
+    description: results[0].templateDescription !== null ? results[0].templateDescription : undefined,
     version: results[0].templateVersion,
-    section: results[0].section.map((section: LoadNarrativeSectionInfo) => {
-
-      rdsConnectionParams.logger.debug(
-        {
-          sectionId: section.sectionId,
-          questionCount: section.question.length
-        },
-        'Loaded narrative section information'
-      )
-
-      return {
-        id: section.sectionId,
-        title: section.sectionTitle,
-        description: section.sectionDescription,
-        order: section.sectionOrder,
-        question: section.question.map((question: LoadNarrativeQuestionInfo) => {
-
-          rdsConnectionParams.logger.debug(
-            {
-              questionId: question.questionId,
-              answerId: question.answerId
-            },
-            'Loaded narrative question information'
-          )
-
-          return {
-            id: question.questionId,
-            order: question.questionOrder,
-            text: question.questionText,
-            answer: {
-              id: question.answerId,
-              json: question.answerJSON
-            }
-          };
-        })
-      };
-    })
+    section: [],
   };
+
+  results.forEach((row) => {
+    // Sections may have several rows in the results, so we need to check if we
+    // already have the section defined.
+    let curSection = narrative.section.find((s) => {
+      return s.id === row.sectionId;
+    });
+
+    if (curSection === undefined || curSection === null) {
+      curSection = {
+        id: row.sectionId,
+        title: row.sectionTitle,
+        description: row.sectionDescription !== null ? row.sectionDescription : undefined,
+        order: row.sectionOrder !== null ? row.sectionOrder : 0,
+        question: [],
+      };
+      narrative.section.push(curSection);
+    }
+
+    const hasAnswer = row.answerJSON !== undefined && row.answerJSON !== null;
+
+    // Every row in the results represents a single question/answer pair
+    curSection.question.push({
+      id: row.questionId,
+      text: row.questionText,
+      order: row.questionOrder !== null ? row.questionOrder : 0,
+      answer: hasAnswer
+        ? {
+            id: row.answerId,
+            json: row.answerJSON
+          }
+        : undefined
+    });
+  });
+
+  return narrative;
 }
 
 /**
@@ -738,6 +716,8 @@ const buildDMPToolExtensions = async (
     rdsConnectionParams,
     plan.id
   );
+
+  rdsConnectionParams.logger.debug({ narrative }, 'Loaded narrative information');
 
   // Fetch the research domain if one was specified
   const research_domain = project.dmptool_research_domain

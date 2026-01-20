@@ -374,65 +374,148 @@ describe('planToDMPCommonStandard', () => {
     json: JSON.stringify(mockResearchOutputTableAnswer)
   }
 
+  const mockNarrativeResults = [
+    {
+      templateId: 999,
+      templateTitle: 'Example DMP Tool Template',
+      templateDescription: 'This template is for testing only!',
+      templateVersion: 'v12',
+      sectionId: 1,
+      sectionTitle: 'First section',
+      sectionDescription: '<p>The first section of this template<p>',
+      sectionOrder: 1,
+      questionId: 1,
+      questionText: 'What is the secret password?',
+      questionOrder: 1,
+      answerId: 1,
+      answerJSON: {
+        type: "text",
+        answer: "open sesame",
+        meta: { schemaVersion: "1.0" }
+      }
+    },
+    {
+      templateId: 999,
+      templateTitle: 'Example DMP Tool Template',
+      templateDescription: 'This template is for testing only!',
+      templateVersion: 'v12',
+      sectionId: 1,
+      sectionTitle: 'First section',
+      sectionDescription: '<p>The first section of this template<p>',
+      sectionOrder: 1,
+      questionId: 2,
+      questionText: 'What is your favorite color?',
+      questionOrder: 2,
+      answerId: 2,
+      answerJSON: {
+        type: "selectBox",
+        answer: "blue",
+        meta: { schemaVersion: "1.0" }
+      }
+    },
+    {
+      templateId: 999,
+      templateTitle: 'Example DMP Tool Template',
+      templateDescription: 'This template is for testing only!',
+      templateVersion: 'v12',
+      sectionId: 2,
+      sectionTitle: 'Second section',
+      sectionDescription: '<p>The second section of this template<p>',
+      sectionOrder: 1,
+      questionId: 3,
+      questionText: 'Do you agree to the terms and conditions?',
+      questionOrder: 1,
+      answerId: 3,
+      answerJSON: {
+        type: "checkBoxes",
+        answer: ["yes", "maybe"],
+        meta: { schemaVersion: "1.0" }
+      }
+    },
+    {
+      templateId: 999,
+      templateTitle: 'Example DMP Tool Template',
+      templateDescription: 'This template is for testing only!',
+      templateVersion: 'v12',
+      sectionId: 2,
+      sectionTitle: 'Second section',
+      sectionDescription: '<p>The second section of this template<p>',
+      sectionOrder: 1,
+      questionId: 4,
+      questionText: 'What outputs will your project produce?',
+      questionOrder: 2,
+      answerId: 4,
+      answerJSON: mockResearchOutputTableAnswer
+    }
+  ]
+
   const mockCompleteNarrative: LoadNarrativeInfo = {
-    templateId: 999,
-    templateTitle: 'Example DMP Tool Template',
-    templateDescription: 'This template is for testing only!',
-    templateVersion: 'v12',
+    id: 999,
+    title: 'Example DMP Tool Template',
+    description: 'This template is for testing only!',
+    version: 'v12',
     section: [
       {
-        sectionId: 1,
-        sectionTitle: 'First section',
-        sectionDescription: '<p>The first section of this template<p>',
-        sectionOrder: 1,
+        id: 1,
+        title: 'First section',
+        description: '<p>The first section of this template<p>',
+        order: 1,
         question: [
           {
-            questionId: 1,
-            questionOrder: 1,
-            questionText: 'What is the secret password?',
-            answerId: 1,
-            answerJSON: {
-              answer: "open sesame",
-              meta: { schemaVersion:"1.0" },
-              type: "text"
+            id: 1,
+            order: 1,
+            text: 'What is the secret password?',
+            answer: {
+              id: 1,
+              json: {
+                answer: "open sesame",
+                meta: { schemaVersion: "1.0" },
+                type: "text"
+              }
             }
           },
           {
-            questionId: 2,
-            questionOrder: 2,
-            questionText: 'What is your favorite color?',
-            answerId: 2,
-            answerJSON: {
-              answer: "blue",
-              meta: { schemaVersion:"1.0" },
-              type: "selectBox"
+            id: 2,
+            order: 2,
+            text: 'What is your favorite color?',
+            answer: {
+              id: 2,
+              json: {
+                answer: "blue",
+                meta: { schemaVersion: "1.0" },
+                type: "selectBox"
+              }
             }
           }
         ]
       },
       {
-        sectionId: 2,
-        sectionTitle: 'Second section',
-        sectionDescription: '<p>The second section of this template<p>',
-        sectionOrder: 1,
+        id: 2,
+        title: 'Second section',
+        description: '<p>The second section of this template<p>',
+        order: 1,
         question: [
           {
-            questionId: 3,
-            questionOrder: 1,
-            questionText: 'Do you agree to the terms and conditions?',
-            answerId: 3,
-            answerJSON: {
-              answer: ["yes", "maybe"],
-              meta: { schemaVersion:"1.0" },
-              type: "checkBoxes"
+            id: 3,
+            order: 1,
+            text: 'Do you agree to the terms and conditions?',
+            answer: {
+              id: 3,
+              json: {
+                answer: ["yes", "maybe"],
+                meta: { schemaVersion: "1.0" },
+                type: "checkBoxes"
+              }
             }
           },
           {
-            questionId: 4,
-            questionOrder: 2,
-            questionText: 'What outputs will your project produce?',
-            answerId: 4,
-            answerJSON: mockResearchOutputTableAnswer
+            id: 4,
+            order: 2,
+            text: 'What outputs will your project produce?',
+            answer: {
+              id: 4,
+              json: mockResearchOutputTableAnswer
+            }
           }
         ]
       }
@@ -552,7 +635,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: []})  // No Funding Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]})
-        .mockResolvedValueOnce({results: [mockCompleteNarrative]});
+        .mockResolvedValueOnce({results: mockNarrativeResults});
 
       const result = await planToDMPCommonStandard(
         mockConfig,
@@ -565,24 +648,24 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp?.narrative).toBeDefined();
 
       // Verify the Template details
-      expect(result?.dmp?.narrative?.template?.title).toEqual(mockCompleteNarrative.templateTitle);
-      expect(result?.dmp?.narrative?.template?.description).toEqual(mockCompleteNarrative.templateDescription);
-      expect(result?.dmp?.narrative?.template?.version).toEqual(mockCompleteNarrative.templateVersion);
+      expect(result?.dmp?.narrative?.template?.title).toEqual(mockCompleteNarrative.title);
+      expect(result?.dmp?.narrative?.template?.description).toEqual(mockCompleteNarrative.description);
+      expect(result?.dmp?.narrative?.template?.version).toEqual(mockCompleteNarrative.version);
       expect(result?.dmp?.narrative?.template?.section).toHaveLength(2);
 
       // Verify the first section
-      expect(result?.dmp?.narrative?.template?.section[0].id).toEqual(mockCompleteNarrative.section[0].sectionId);
-      expect(result?.dmp?.narrative?.template?.section[0].title).toEqual(mockCompleteNarrative.section[0].sectionTitle);
-      expect(result?.dmp?.narrative?.template?.section[0].description).toEqual(mockCompleteNarrative.section[0].sectionDescription);
-      expect(result?.dmp?.narrative?.template?.section[0].order).toEqual(mockCompleteNarrative.section[0].sectionOrder);
+      expect(result?.dmp?.narrative?.template?.section[0].id).toEqual(mockCompleteNarrative.section[0].id);
+      expect(result?.dmp?.narrative?.template?.section[0].title).toEqual(mockCompleteNarrative.section[0].title);
+      expect(result?.dmp?.narrative?.template?.section[0].description).toEqual(mockCompleteNarrative.section[0].description);
+      expect(result?.dmp?.narrative?.template?.section[0].order).toEqual(mockCompleteNarrative.section[0].order);
       expect(result?.dmp?.narrative?.template?.section[0].question).toHaveLength(2);
 
       // Verify the first question
-      expect(result?.dmp?.narrative?.template?.section[0].question[0].id).toEqual(mockCompleteNarrative.section[0].question[0].questionId);
-      expect(result?.dmp?.narrative?.template?.section[0].question[0].order).toEqual(mockCompleteNarrative.section[0].question[0].questionOrder);
-      expect(result?.dmp?.narrative?.template?.section[0].question[0].text).toEqual(mockCompleteNarrative.section[0].question[0].questionText);
-      expect(result?.dmp?.narrative?.template?.section[0].question[0].answer.id).toEqual(mockCompleteNarrative.section[0].question[0].answerId);
-      expect(result?.dmp?.narrative?.template?.section[0].question[0].answer.json).toEqual(mockCompleteNarrative.section[0].question[0].answerJSON);
+      expect(result?.dmp?.narrative?.template?.section[0].question[0].id).toEqual(mockCompleteNarrative.section[0].question[0].id);
+      expect(result?.dmp?.narrative?.template?.section[0].question[0].order).toEqual(mockCompleteNarrative.section[0].question[0].order);
+      expect(result?.dmp?.narrative?.template?.section[0].question[0].text).toEqual(mockCompleteNarrative.section[0].question[0].text);
+      expect(result?.dmp?.narrative?.template?.section[0].question[0].answer.id).toEqual(mockCompleteNarrative.section[0].question[0].answer.id);
+      expect(result?.dmp?.narrative?.template?.section[0].question[0].answer.json).toEqual(mockCompleteNarrative.section[0].question[0].answer.json);
     });
 
     it('includes members in the DMP when present', async () => {

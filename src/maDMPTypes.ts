@@ -68,26 +68,28 @@ export interface LoadRelatedWorkInfo {
 }
 
 export interface LoadNarrativeQuestionInfo {
-  questionId: number;
-  questionText: string;
-  questionOrder: number;
-  answerId: number;
-  answerJSON: AnyAnswerType;
+  id: number;
+  text: string;
+  order: number;
+  answer: {
+    id: number;
+    json: AnyAnswerType;
+  }
 }
 
 export interface LoadNarrativeSectionInfo {
-  sectionId: number;
-  sectionTitle: string;
-  sectionDescription?: string;
-  sectionOrder: number;
+  id: number;
+  title: string;
+  description?: string;
+  order: number;
   question: LoadNarrativeQuestionInfo[];
 }
 
 export interface LoadNarrativeInfo {
-  templateId: number;
-  templateTitle: string;
-  templateDescription?: string;
-  templateVersion?: string;
+  id: number;
+  title: string;
+  description?: string;
+  version?: string;
   section: LoadNarrativeSectionInfo[];
 }
 
