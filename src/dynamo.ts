@@ -37,17 +37,19 @@ export interface DynamoConnectionParams {
 
 // The list of properties that are extensions to the RDA Common Standard
 const EXTENSION_KEYS: string[] = [
+  'featured',
+  'funding_opportunity',
+  'funding_project',
+  'narrative',
   'provenance',
   'privacy',
-  'featured',
+  'rda_schema_version',
   'registered',
-  'tombstoned',
-  'narrative',
   'research_domain',
   'research_facility',
+  'status',
+  'tombstoned',
   'version',
-  'funding_opportunity',
-  'funding_project'
 ];
 
 interface DMPVersionType {

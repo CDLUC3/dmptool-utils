@@ -16,9 +16,13 @@ export interface PutEventResponse {
  * Publishes an event to EventBridge.
  *
  * @param logger The logger to use for logging.
+ * @param busName The name of the EventBridge bus to publish the event to.
  * @param source The name of the caller (e.g. the Lambda Function or Application Function)
  * @param detailType The type of event (resources typically watch for specific types of events)
  * @param detail The payload of the event (will be accessible to the invoked resource)
+ * @param region The region to publish the event in. Defaults to 'us-west-2'.
+ * @returns A PutEventResponse object containing the status code and message of the response from EventBridge.
+ * @throws Error if there was an error publishing the event.
  */
 export const putEvent = async (
   logger: Logger,
