@@ -129,6 +129,57 @@ export const DMPExists = async (
 }
 
 /**
+ * Fetch the latest version for every unique DMP ID
+ *
+ * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @returns The latest version for every unique DMP ID
+ * @throws DMPToolDynamoError if the records could not be fetched due to an error
+ */
+export const getAllUniqueDMPIds = async (
+  dynamoConnectionParams: DynamoConnectionParams
+): Promise<Map<string, string>> => {
+  if (!dynamoConnectionParams) {
+    throw new DMPToolDynamoError('Missing Dynamo config');
+  }
+
+  // Get the PK, SK and modified timestamps for all the latest versions
+  const params = {
+    ProjectionExpression: "PK, #mod", // `modified` is a reserved word in DynamoDB
+    FilterExpression: `SK = :sk`,
+    ExpressionAttributeNames: { "#mod": "modified" },
+    ExpressionAttributeValues: {
+      ":sk": { S: `${DMP_VERSION_PREFIX}#${DMP_LATEST_VERSION}` }
+    }
+  }
+
+  try {
+    dynamoConnectionParams.logger.debug({ ...params }, 'Scanning for latest DMP versions in DynamoDB')
+    const response: DynamoVersionItemType[] = await scanTable(dynamoConnectionParams, params);
+
+    if (Array.isArray(response) && response.length > 0) {
+      const versions = new Map<string, string>();
+      for (const item of response) {
+        const unmarshalled: Record<string, any> = unmarshall(item);
+
+        if (unmarshalled.PK && unmarshalled.modified) {
+          const dmpId = unmarshalled.PK.replace(`${DMP_PK_PREFIX}#`, 'https://');
+          versions.set(dmpId, unmarshalled.modified);
+        }
+      }
+      return versions
+    }
+    return new Map<string, string>();
+
+  } catch (err) {
+    const errMsg: string = toErrorMessage(err);
+    dynamoConnectionParams.logger.fatal({ ...params, errMsg }, 'Failed to fetch all unique DMPs' )
+    throw new DMPToolDynamoError(
+      `Unable to fetch all unique DMPs: ${errMsg}`
+    );
+  }
+}
+
+/**
  * Fetch the version timestamps (including DMP_LATEST_VERSION) for the specified DMP ID.
  *
  * @param dynamoConnectionParams the DynamoDB connection parameters
@@ -279,7 +330,7 @@ export const getDMPs = async (
 
       } else {
         // Just return the RDA Common Standard metadata record
-        return items.map(item => ({ dmp: unmarshall(item) }));
+        return items.map(item => ({ dmp: item }));
       }
     }
   } catch (err) {
@@ -415,10 +466,13 @@ export const createDMP = async (
   }
 
   // If the version is LATEST, then first make sure there is not already one present!
-  const exists: boolean = await DMPExists(dynamoConnectionParams, dmpId);
-  if (exists) {
-    dynamoConnectionParams.logger.error({ dmpId }, 'Latest version already exists');
-    throw new DMPToolDynamoError('Latest version already exists');
+  if (version === DMP_LATEST_VERSION) {
+    const exists: boolean = await DMPExists(dynamoConnectionParams, dmpId);
+
+    if (exists) {
+      dynamoConnectionParams.logger.error({dmpId}, 'Latest version already exists');
+      throw new DMPToolDynamoError('Latest version already exists');
+    }
   }
 
   try {
@@ -930,7 +984,6 @@ export const deleteDMP = async (
 // We're not currently using it, but did not want to remove it just in case
 // we need it in the future
 //
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const scanTable = async (
   dynamoConnectionParams: DynamoConnectionParams,
   params: object

@@ -2,13 +2,15 @@ import pino, { Logger } from 'pino';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DMPToolDMPType } from "@dmptool/types";
 import {
+  DeleteItemCommand,
   DynamoDBClient,
-  QueryCommand,
   PutItemCommand,
-  DeleteItemCommand
+  QueryCommand,
+  ScanCommand
 } from '@aws-sdk/client-dynamodb';
 import {
   DMPExists,
+  getAllUniqueDMPIds,
   getDMPVersions,
   getDMPs,
   DMP_LATEST_VERSION,
@@ -130,6 +132,78 @@ describe('getDMPVersions', () => {
     dynamoMock.on(QueryCommand).rejects(new Error(errorMessage));
 
     await expect(getDMPVersions(mockConfig, mockDmpId)).rejects.toThrow(errorMessage);
+    expect(dynamoMock.calls()).toHaveLength(1);
+  });
+});
+
+describe('getAllUniqueDMPIds', () => {
+  beforeEach(() => {
+    dynamoMock.reset();
+  });
+
+  it('should return array of latest DMP versions when DMPs exist in DynamoDB', async () => {
+    const mockDmpId1 = 'doi.org/11.12345/A1B2C3';
+    const mockDmpId2 = 'doi.org/11.12345/D4E5F6';
+    const mockDmpId3 = 'doi.org/11.12345/G7H8I9';
+
+    dynamoMock.on(ScanCommand).resolves({
+      Items:[
+        {
+          PK: { S: `DMP#${mockDmpId1}` },
+          SK: { S: 'VERSION#latest' },
+          modified: { S: '2025-01-01T12:00:00Z' }
+        },
+        {
+          PK: { S: `DMP#${mockDmpId2}` },
+          SK: { S: 'VERSION#latest' },
+          modified: { S: '2025-01-15T08:30:00Z' }
+        },
+        {
+          PK: { S: `DMP#${mockDmpId3}` },
+          SK: { S: 'VERSION#latest' },
+          modified: { S: '2025-02-01T14:45:00Z' }
+        }
+      ]
+    });
+
+    const result: Map<string, string> = await getAllUniqueDMPIds(mockConfig);
+
+    expect(result).toBeDefined();
+    expect(result.get(`https://${mockDmpId1}`)).toEqual('2025-01-01T12:00:00Z');
+    expect(result.get(`https://${mockDmpId2}`)).toEqual('2025-01-15T08:30:00Z');
+    expect(result.get(`https://${mockDmpId3}`)).toEqual('2025-02-01T14:45:00Z');
+    expect(dynamoMock.calls()).toHaveLength(1);
+  });
+
+  it('should return empty array when no DMPs exist in DynamoDB', async () => {
+    dynamoMock.on(ScanCommand).resolves({ Items: [] });
+
+    const result: Map<string, string> = await getAllUniqueDMPIds(mockConfig);
+
+    expect(result).toEqual(new Map());
+    expect(dynamoMock.calls()).toHaveLength(1);
+  });
+
+  it('should return empty array when response is undefined', async () => {
+    dynamoMock.on(ScanCommand).resolves({ Items:undefined });
+
+    const result: Map<string, string> = await getAllUniqueDMPIds(mockConfig);
+
+    expect(result).toEqual(new Map());
+    expect(dynamoMock.calls()).toHaveLength(1);
+  });
+
+  it('should throw error when dynamoConnectionParams is missing', async () => {
+    await expect(getAllUniqueDMPIds(null as any)).rejects.toThrow('Missing Dynamo config');
+    expect(dynamoMock.calls()).toHaveLength(0);
+  });
+
+  it('should throw error when DynamoDB operation fails', async () => {
+    const errorMessage = 'DynamoDB error';
+
+    dynamoMock.on(ScanCommand).rejects(new Error(errorMessage));
+
+    await expect(getAllUniqueDMPIds(mockConfig)).rejects.toThrow(errorMessage);
     expect(dynamoMock.calls()).toHaveLength(1);
   });
 });
@@ -335,10 +409,6 @@ describe('createDMP', () => {
   it('should successfully create a DMP with version and extension records', async () => {
     dynamoMock.on(PutItemCommand).resolves({})
     dynamoMock.on(QueryCommand)
-      // Call to DMPExists
-      .resolvesOnce({
-        Items: []
-      })
       // Call to getDMPs
       .resolvesOnce({
         Items: [{
@@ -387,23 +457,23 @@ describe('createDMP', () => {
     );
 
     expect(result).toEqual(mockDMP);
-    expect(dynamoMock.calls()).toHaveLength(6);
+    expect(dynamoMock.calls()).toHaveLength(5);
+
+    const firstCall: any = dynamoMock.call(0);
+    expect(firstCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
+    expect(firstCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#${mockVersion}`);
+    expect(firstCall.args[0].input['Item']['title']['S']).toEqual('Test DMP');
+    expect(firstCall.args[0].input['Item']['created']['S']).toEqual('2025-01-15T12:00:00Z');
+    expect(firstCall.args[0].input['Item']['modified']['S']).toEqual('2025-01-15T12:00:00Z');
+    expect(firstCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
+    expect(firstCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
 
     const secondCall: any = dynamoMock.call(1);
     expect(secondCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
-    expect(secondCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#${mockVersion}`);
-    expect(secondCall.args[0].input['Item']['title']['S']).toEqual('Test DMP');
-    expect(secondCall.args[0].input['Item']['created']['S']).toEqual('2025-01-15T12:00:00Z');
-    expect(secondCall.args[0].input['Item']['modified']['S']).toEqual('2025-01-15T12:00:00Z');
-    expect(secondCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
-    expect(secondCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
-
-    const thirdCall: any = dynamoMock.call(2);
-    expect(thirdCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
-    expect(thirdCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#${mockVersion}`);
-    expect(thirdCall.args[0].input['Item']['provenance']['S']).toEqual('tester');
-    expect(thirdCall.args[0].input['Item']['featured']['S']).toEqual('yes');
-    expect(thirdCall.args[0].input['Item']['privacy']['S']).toEqual('public');
+    expect(secondCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#${mockVersion}`);
+    expect(secondCall.args[0].input['Item']['provenance']['S']).toEqual('tester');
+    expect(secondCall.args[0].input['Item']['featured']['S']).toEqual('yes');
+    expect(secondCall.args[0].input['Item']['privacy']['S']).toEqual('public');
   });
 
   it('doesn\'t allow a version to be created if it already exists', async () => {
@@ -434,7 +504,7 @@ describe('createDMP', () => {
     dynamoMock.on(QueryCommand).resolvesOnce({ Items: [] });
 
     await expect(createDMP(mockConfig, mockDomain, mockDmpId, mockDMP, mockVersion)).rejects.toThrow(errorMessage);
-    expect(dynamoMock.calls()).toHaveLength(2);
+    expect(dynamoMock.calls()).toHaveLength(1);
   });
 });
 
@@ -638,10 +708,6 @@ describe('updateDMP', () => {
           }
         ]
       })
-      // Call to DMPExists
-      .resolvesOnce({
-        Items: []
-      })
       // Call to getDMPs
       .resolvesOnce({
         Items: [{
@@ -727,10 +793,10 @@ describe('updateDMP', () => {
     const result = await updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP);
 
     expect(result).toEqual(mockDMP);
-    expect(dynamoMock.calls()).toHaveLength(14);
+    expect(dynamoMock.calls()).toHaveLength(13);
 
     // Test new version creation
-    const fourthCall: any = dynamoMock.call(4);
+    const fourthCall: any = dynamoMock.call(3);
     expect(fourthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
     expect(fourthCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#2025-01-30T11:30:00Z`);
     expect(fourthCall.args[0].input['Item']['title']['S']).toEqual('Test DMP');
@@ -739,7 +805,7 @@ describe('updateDMP', () => {
     expect(fourthCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
     expect(fourthCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
 
-    const fifthCall: any = dynamoMock.call(5);
+    const fifthCall: any = dynamoMock.call(4);
     expect(fifthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
     expect(fifthCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#2025-01-30T11:30:00Z`);
     expect(fifthCall.args[0].input['Item']['provenance']['S']).toEqual('another-system');
@@ -747,21 +813,21 @@ describe('updateDMP', () => {
     expect(fifthCall.args[0].input['Item']['privacy']['S']).toEqual('public');
 
     // Test updates to latest version
-    const eigthCall: any = dynamoMock.call(9);
-    expect(eigthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
-    expect(eigthCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#${DMP_LATEST_VERSION}`);
-    expect(eigthCall.args[0].input['Item']['title']['S']).toEqual('Updated Test DMP');
-    expect(eigthCall.args[0].input['Item']['created']['S']).toEqual('2025-01-15T12:00:00Z');
-    expect(eigthCall.args[0].input['Item']['modified']['S']).toEqual(modifiedTstamp);
-    expect(eigthCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
-    expect(eigthCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
-
-    const ninthCall: any = dynamoMock.call(10);
+    const ninthCall: any = dynamoMock.call(8);
     expect(ninthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
-    expect(ninthCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#${DMP_LATEST_VERSION}`);
-    expect(ninthCall.args[0].input['Item']['provenance']['S']).toEqual('tester');
-    expect(ninthCall.args[0].input['Item']['featured']['S']).toEqual('no');
-    expect(ninthCall.args[0].input['Item']['privacy']['S']).toEqual('private');
+    expect(ninthCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#${DMP_LATEST_VERSION}`);
+    expect(ninthCall.args[0].input['Item']['title']['S']).toEqual('Updated Test DMP');
+    expect(ninthCall.args[0].input['Item']['created']['S']).toEqual('2025-01-15T12:00:00Z');
+    expect(ninthCall.args[0].input['Item']['modified']['S']).toEqual(modifiedTstamp);
+    expect(ninthCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
+    expect(ninthCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
+
+    const tenthCall: any = dynamoMock.call(9);
+    expect(tenthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
+    expect(tenthCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#${DMP_LATEST_VERSION}`);
+    expect(tenthCall.args[0].input['Item']['provenance']['S']).toEqual('tester');
+    expect(tenthCall.args[0].input['Item']['featured']['S']).toEqual('no');
+    expect(tenthCall.args[0].input['Item']['privacy']['S']).toEqual('private');
   });
 
   it('should successfully update the DMP and create a version snapshot when enough time has elapsed', async () => {
@@ -804,10 +870,6 @@ describe('updateDMP', () => {
             modified: { S: '2025-01-01T00:00:00Z' }
           }
         ]
-      })
-      // Call to DMPExists
-      .resolvesOnce({
-        Items: []
       })
       // Call to getDMPs
       .resolvesOnce({
@@ -894,10 +956,10 @@ describe('updateDMP', () => {
     const result = await updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP);
 
     expect(result).toEqual(mockDMP);
-    expect(dynamoMock.calls()).toHaveLength(14);
+    expect(dynamoMock.calls()).toHaveLength(13);
 
     // Test new version creation
-    const fourthCall: any = dynamoMock.call(4);
+    const fourthCall: any = dynamoMock.call(3);
     expect(fourthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
     expect(fourthCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#2025-01-30T05:30:00Z`);
     expect(fourthCall.args[0].input['Item']['title']['S']).toEqual('Test DMP');
@@ -906,7 +968,7 @@ describe('updateDMP', () => {
     expect(fourthCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
     expect(fourthCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
 
-    const fifthCall: any = dynamoMock.call(5);
+    const fifthCall: any = dynamoMock.call(4);
     expect(fifthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
     expect(fifthCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#2025-01-30T05:30:00Z`);
     expect(fifthCall.args[0].input['Item']['provenance']['S']).toEqual('tester');
@@ -914,21 +976,21 @@ describe('updateDMP', () => {
     expect(fifthCall.args[0].input['Item']['privacy']['S']).toEqual('public');
 
     // Test updates to latest version
-    const eigthCall: any = dynamoMock.call(9);
-    expect(eigthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
-    expect(eigthCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#${DMP_LATEST_VERSION}`);
-    expect(eigthCall.args[0].input['Item']['title']['S']).toEqual('Updated Test DMP');
-    expect(eigthCall.args[0].input['Item']['created']['S']).toEqual('2025-01-15T12:00:00Z');
-    expect(eigthCall.args[0].input['Item']['modified']['S']).toEqual(modifiedTstamp);
-    expect(eigthCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
-    expect(eigthCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
-
-    const ninthCall: any = dynamoMock.call(10);
+    const ninthCall: any = dynamoMock.call(8);
     expect(ninthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
-    expect(ninthCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#${DMP_LATEST_VERSION}`);
-    expect(ninthCall.args[0].input['Item']['provenance']['S']).toEqual('tester');
-    expect(ninthCall.args[0].input['Item']['featured']['S']).toEqual('no');
-    expect(ninthCall.args[0].input['Item']['privacy']['S']).toEqual('private');
+    expect(ninthCall.args[0].input['Item']['SK']['S']).toEqual(`VERSION#${DMP_LATEST_VERSION}`);
+    expect(ninthCall.args[0].input['Item']['title']['S']).toEqual('Updated Test DMP');
+    expect(ninthCall.args[0].input['Item']['created']['S']).toEqual('2025-01-15T12:00:00Z');
+    expect(ninthCall.args[0].input['Item']['modified']['S']).toEqual(modifiedTstamp);
+    expect(ninthCall.args[0].input['Item']['dmp_id']['M']['identifier']['S']).toEqual(`https://${mockDmpId}`);
+    expect(ninthCall.args[0].input['Item']['dmp_id']['M']['type']['S']).toEqual('doi');
+
+    const tenthCall: any = dynamoMock.call(9);
+    expect(tenthCall.args[0].input['Item']['PK']['S']).toEqual(`DMP#${mockDmpId}`);
+    expect(tenthCall.args[0].input['Item']['SK']['S']).toEqual(`EXTENSION#${DMP_LATEST_VERSION}`);
+    expect(tenthCall.args[0].input['Item']['provenance']['S']).toEqual('tester');
+    expect(tenthCall.args[0].input['Item']['featured']['S']).toEqual('no');
+    expect(tenthCall.args[0].input['Item']['privacy']['S']).toEqual('private');
   });
 
   it('doesn\'t allow updates if the DMP does not have a latest version', async () => {
@@ -1082,7 +1144,7 @@ describe('updateDMP', () => {
       });
 
     await expect(updateDMP(mockConfig, mockDomain, mockDmpId, mockDMP)).rejects.toThrow(errorMessage);
-    expect(dynamoMock.calls()).toHaveLength(5);
+    expect(dynamoMock.calls()).toHaveLength(4);
   });
 });
 
