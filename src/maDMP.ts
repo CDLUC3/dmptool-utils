@@ -1,10 +1,11 @@
 import { Validator } from 'jsonschema';
 import { Logger } from 'pino';
-import {ConnectionParams, queryTable} from './rds';
+import { ConnectionParams, queryTable } from './rds';
 import {
   convertMySQLDateTimeToRFC3339,
   EnvironmentEnum,
   isNullOrUndefined,
+  isValidDate,
   normaliseHttpProtocol,
   removeNullAndUndefinedFromObject,
 } from "./general";
@@ -524,37 +525,41 @@ const loadNarrativeTemplateInfo = async (
   };
 
   results.forEach((row) => {
-    // Sections may have several rows in the results, so we need to check if we
-    // already have the section defined.
-    let curSection = narrative.section.find((s) => {
-      return s.id === row.sectionId;
-    });
+    if (row.sectionId !== null && row.sectionId !== undefined) {
+      // Sections may have several rows in the results, so we need to check if we
+      // already have the section defined.
+      let curSection = narrative.section.find((s) => {
+        return s.id === row.sectionId;
+      });
 
-    if (curSection === undefined || curSection === null) {
-      curSection = {
-        id: row.sectionId,
-        title: row.sectionTitle,
-        description: row.sectionDescription !== null ? row.sectionDescription : undefined,
-        order: row.sectionOrder !== null ? row.sectionOrder : 0,
-        question: [],
-      };
-      narrative.section.push(curSection);
+      if (curSection === undefined || curSection === null) {
+        curSection = {
+          id: row.sectionId,
+          title: row.sectionTitle,
+          description: row.sectionDescription !== null ? row.sectionDescription : undefined,
+          order: row.sectionOrder !== null ? row.sectionOrder : 0,
+          question: [],
+        };
+        narrative.section.push(curSection);
+      }
+
+      if (row.questionId !== null && row.questionId !== undefined) {
+        const hasAnswer = row.answerJSON !== undefined && row.answerJSON !== null;
+
+        // Every row in the results represents a single question/answer pair
+        curSection.question.push({
+          id: row.questionId,
+          text: row.questionText,
+          order: row.questionOrder !== null ? row.questionOrder : 0,
+          answer: hasAnswer
+            ? {
+              id: row.answerId,
+              json: row.answerJSON
+            }
+            : undefined
+        });
+      }
     }
-
-    const hasAnswer = row.answerJSON !== undefined && row.answerJSON !== null;
-
-    // Every row in the results represents a single question/answer pair
-    curSection.question.push({
-      id: row.questionId,
-      text: row.questionText,
-      order: row.questionOrder !== null ? row.questionOrder : 0,
-      answer: hasAnswer
-        ? {
-            id: row.answerId,
-            json: row.answerJSON
-          }
-        : undefined
-    });
   });
 
   return narrative;
@@ -707,7 +712,7 @@ const buildDMPToolExtensions = async (
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     provenance: applicationName!,
     featured: plan.featured ? 'yes' : 'no',
-    privacy: plan.visibility?.toLowerCase() ?? 'private',
+    privacy: plan.visibility === 'PUBLIC' ? 'public' : 'private',
     status: plan.status?.toLowerCase() ?? 'draft',
   }
 
@@ -795,8 +800,10 @@ const buildDMPToolExtensions = async (
   }
 
   if (!isNullOrUndefined(narrative)) {
+    const id = plan.dmpId.replace('https://doi.org/', '');
+
     extensions.narrative = {
-      download_url: `https://${domainName}/dmps/${plan.dmpId}/narrative`,
+      download_url: `https://${domainName}/dmps/${id}/narrative`,
       template: narrative
     };
   }
@@ -862,8 +869,8 @@ const buildProject = (
   return {
     title: project.title,
     description: project.abstractText ?? undefined,
-    start: project.startDate ?? undefined,
-    end: project.endDate ?? undefined,
+    start: isValidDate(project.startDate ?? '') ? project.startDate : undefined,
+    end: isValidDate(project.endDate ?? '') ? project.endDate : undefined,
     project_id: [{
       identifier: internalIdBase(applicationName, project.id, planId),
       type: 'other'

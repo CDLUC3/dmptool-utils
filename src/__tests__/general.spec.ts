@@ -5,9 +5,61 @@ import {
   randomHex,
   convertMySQLDateTimeToRFC3339,
   normaliseHttpProtocol,
-  removeNullAndUndefinedFromObject
+  removeNullAndUndefinedFromObject,
+  isValidDate
 } from '../general';
 
+describe('isValidDate', () => {
+  it('returns true for valid ISO 8601 date string', () => {
+    expect(isValidDate('2024-01-15')).toBe(true);
+  });
+
+  it('returns true for valid ISO 8601 datetime string', () => {
+    expect(isValidDate('2024-01-15T14:30:45')).toBe(true);
+  });
+
+  it('returns true for valid ISO 8601 datetime with timezone', () => {
+    expect(isValidDate('2024-01-15T14:30:45Z')).toBe(true);
+    expect(isValidDate('2024-01-15T14:30:45+00:00')).toBe(true);
+  });
+
+  it('returns true for valid date string in different format', () => {
+    expect(isValidDate('January 15, 2024')).toBe(true);
+    expect(isValidDate('01/15/2024')).toBe(true);
+  });
+
+  it('returns false for invalid date string', () => {
+    expect(isValidDate('invalid-date')).toBe(false);
+    expect(isValidDate('not a date')).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isValidDate('')).toBe(false);
+  });
+
+  it('returns false for invalid date values', () => {
+    expect(isValidDate('2024-13-01')).toBe(false); // Invalid month
+    expect(isValidDate('2024-01-32')).toBe(false); // Invalid day
+  });
+
+  it('returns false for a timestamp string', () => {
+    expect(isValidDate('1769703186701')).toBe(false);
+  });
+
+  it('returns true for edge case dates', () => {
+    expect(isValidDate('1970-01-01T00:00:00Z')).toBe(true); // Unix epoch
+    expect(isValidDate('2038-01-19T03:14:07Z')).toBe(true); // Near 32-bit timestamp limit
+  });
+
+  it('returns false for partial date strings', () => {
+    expect(isValidDate('2024')).toBe(true); // Year only is technically valid
+    expect(isValidDate('2024-01')).toBe(true); // Year-month is technically valid
+  });
+
+  it('returns true for dates with time but no timezone', () => {
+    expect(isValidDate('2024-01-15 14:30:45')).toBe(true);
+  });
+});
 
 describe('normaliseHttpProtocol', () => {
   it('converts http:// to https://', () => {

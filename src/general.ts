@@ -37,6 +37,18 @@ export const normaliseHttpProtocol = (
 }
 
 /**
+ * Function to determine if the string is a valid date / time
+ *
+ * @param dateString the date string to validate
+ * @returns true if the date string is valid, false otherwise
+ */
+export const isValidDate = (dateString: string): boolean => {
+  const date = Date.parse(dateString);
+  // A valid date will return a number, an invalid one will return NaN
+  return !Number.isNaN(date);
+}
+
+/**
  *Function to return the current date.
  *
  * @returns The current date as YYYY-MM-DD.

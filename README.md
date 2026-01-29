@@ -15,7 +15,7 @@ See below for usage examples of each utility.
 - [AWS CloudFormation Stack Output Access](#cloudformation-support)
 - [AWS DynamoDB Table Access](#dynamodb-support)
 - [General Helper Functions](#general-helper-functions)
-- [EventBridge Event Publication](#eventbridge-support)
+- [SQS Message Publication](#sqs-support)
 - [Logger Support (Pino with ECS formatting)](#logger-support-pino-with-ecs-formatting)
 - [maDMP Support (serialization and deserialization)](#madmp-support-serialization-and-deserialization)
 - [AWS RDS MySQL Database Access](#rds-mysql-support)
@@ -209,40 +209,40 @@ if (exists) {
   }
 }
 ```
-## EventBridge Support
+## SQS Support
 
-This code can be used to publish events to the EventBridge.
+This code can be used to send messages to an SQS Queue.
 
 ### Example usage
 ```typescript
-import { initializeLogger, LogLevelEnum, publishMessage } from '@dmptool/utils';
+import { initializeLogger, sendMessage, SendMessageResponse } from '@dmptool/utils';
 
 const region = 'us-west-2';
 
 // Initialize a logger
 const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
 
-const busName = 'arn:aws:sns:us-east-1:123456789012:my-topic';
+const queueURL = 'https://sqs.us-west-2.amazonaws.com/12345/my-example-function';
 
 // See the documentation for the AWS Lambda you are trying to invoke to determine what the
 // `detail-type` and `detail` payload should look like.
-const source = 'my-application';
-const detailType = 'my-event';  
+const source = 'my-application'; 
+const detailType = 'my-message';  
 const detail = { property1: 'value1', property2: 'value2' }
 
-const response = await publishMessage(
+const sent: SendMessageResponse = await sendMessage(
   logger,
-  busName,
+  queueURL,
   source,
   detailType,
   detail,
-  region
+  region,
 );
 
-if (response.statusCode === 200) {
-  console.log('Message published successfully', response.body);
+if (sent && sent.status >= 200 && sent.status < 300) {
+  console.log('Message successfully sent', sent.status);
 } else {
-  console.log('Error publishing message', response.body);
+  console.log('Error sending message', sent.status, sent.messageId);
 }
 ```
 
@@ -304,6 +304,7 @@ Environment variable requirements:
 ### Example usage
 ```typescript
 import { Logger } from 'pino';
+import { Context, SQSEvent, SQSHandler, SQSBatchResponse } from 'aws-lambda';
 import { initializeLogger, LogLevel } from '@dmptool/utils';
 
 process.env.AWS_REGION = 'us-west-2';
@@ -316,14 +317,20 @@ const logger: Logger = initializeLogger('GenerateMaDMPRecordLambda', LogLevel[LO
 // Setup the LambdaRequestTracker for the logger
 const withRequest = lambdaRequestTracker();
 
-export const handler: Handler = async (event: EventBridgeEvent<string, EventBridgeDetails>, context: Context) => {
+export const handler: SQSHandler = async (event: SQSEvent, context: Context): Promise<SQSBatchResponse> => {
   // Log the incoming event and context
   logger.debug({ event, context }, 'Received event');
   
   // Initialize the logger by setting up automatic request tracing.
   withRequest(event, context);
 
-  logger.info({ log_level: LOG_LEVEL, foo: "bar" }, 'Hello World!');
+  // Loop through the records in the event
+  for (const record of event.Records) {
+    logger.info({
+      log_level: LOG_LEVEL,
+      record_body: record.body
+    }, 'Processing record');
+  }
 }
 ```
 
