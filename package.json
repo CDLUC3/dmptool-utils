@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "1.0.38",
+  "version": "1.0.39",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,6 +30,9 @@
     "type-check": "tsc --noEmit",
     "trivy-high": "./scripts/trivy-high.sh",
     "trivy-med": "./scripts/trivy-med.sh"
+  },
+  "overrides": {
+    "fast-xml-parser": "5.3.4"
   },
   "dependencies": {
     "@dmptool/types": "2.3.2",
