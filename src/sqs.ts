@@ -21,6 +21,8 @@ export interface SendMessageResponse {
  * @param detailType The type of message
  * @param detail The payload of the message (will be accessible to the invoked resource)
  * @param region The region to publish the message in. Defaults to 'us-west-2'.
+ * @param useTLS Whether to use TLS when sending the message. Defaults to true.
+ * Should be false when running in a local development environment.
  * @returns A SendMessageResponse object containing the status code and message info.
  * @throws Error if there was an error sending the message
  */
@@ -30,13 +32,19 @@ export const sendMessage = async (
   source: string,
   detailType: string,
   details: Record<string, unknown>,
-  region = 'us-west-2'
+  region = 'us-west-2',
+  useTLS = true // Should be false when running in a local dev environment
 ): Promise<SendMessageResponse> => {
   let errMsg = '';
 
   if (logger && queueURL) {
     // Create a new SQS client instance
-    const client = new SQSClient({ region });
+    const client = new SQSClient({
+      region,
+      // These should be false when running in a local dev environment
+      useQueueUrlAsEndpoint: useTLS || true,
+      tls: useTLS || true,
+    });
 
     logger.debug({ queueURL, source, detailType, details }, 'Sending message');
 

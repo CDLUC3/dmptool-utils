@@ -18,7 +18,11 @@ describe('getSSMParameter', () => {
     });
 
     const result = await getSSMParameter(
-      mockLogger,
+      {
+        logger: mockLogger,
+        region: 'us-west-2',
+        useTLS: false
+      },
       'my-key',
       EnvironmentEnum.DEV
     );
@@ -30,7 +34,11 @@ describe('getSSMParameter', () => {
     ssmMock.on(GetParameterCommand).rejects(new Error('AWS Error'));
 
     const result = await getSSMParameter(
-      mockLogger,
+      {
+        logger: mockLogger,
+        region: 'us-west-2',
+        useTLS: false
+      },
       'my-key',
       EnvironmentEnum.DEV
     );
@@ -39,7 +47,15 @@ describe('getSSMParameter', () => {
   });
 
   it('returns undefined if no key is specified', async () => {
-    const result = await getSSMParameter(mockLogger, '', EnvironmentEnum.DEV);
+    const result = await getSSMParameter(
+      {
+        logger: mockLogger,
+        region: 'us-west-2',
+        useTLS: false
+      },
+      '',
+      EnvironmentEnum.DEV
+    );
     expect(result).toBeUndefined();
   });
 });

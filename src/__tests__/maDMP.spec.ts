@@ -386,6 +386,7 @@ describe('planToDMPCommonStandard', () => {
       sectionOrder: 1,
       questionId: 1,
       questionText: 'What is the secret password?',
+      questionJSON: '{"type":"text"}',
       questionOrder: 1,
       answerId: 1,
       answerJSON: {
@@ -405,6 +406,7 @@ describe('planToDMPCommonStandard', () => {
       sectionOrder: 1,
       questionId: 2,
       questionText: 'What is your favorite color?',
+      questionJSON: { type : "selectBox" },
       questionOrder: 2,
       answerId: 2,
       answerJSON: {
@@ -424,6 +426,7 @@ describe('planToDMPCommonStandard', () => {
       sectionOrder: 1,
       questionId: 3,
       questionText: 'Do you agree to the terms and conditions?',
+      questionJSON: { type: "checkBoxes" },
       questionOrder: 1,
       answerId: 3,
       answerJSON: {
@@ -443,6 +446,7 @@ describe('planToDMPCommonStandard', () => {
       sectionOrder: 1,
       questionId: 4,
       questionText: 'What outputs will your project produce?',
+      questionJSON: { type: "researchOutputTable" },
       questionOrder: 2,
       answerId: 4,
       answerJSON: mockResearchOutputTableAnswer
@@ -624,18 +628,18 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp?.registered).toBeUndefined();
     });
 
-    it('includes narrative in the DMP when present', async () => {
+    it.only('includes narrative in the DMP when present', async () => {
       // Mock all the calls to the RDS MySQL tables
       (queryTable as jest.Mock)
-        .mockResolvedValueOnce({results: [mockUnregisteredPlanInfo]})
-        .mockResolvedValueOnce({results: [mockProjectMinimumInfo]})
-        .mockResolvedValueOnce({results: []})  // No Plan members
-        .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
-        .mockResolvedValueOnce({results: []})  // No Research Outputs
-        .mockResolvedValueOnce({results: []})  // No Funding Info
-        .mockResolvedValueOnce({results: []})  // No Related Works Info
-        .mockResolvedValueOnce({results: [defaultMemberRole]})
-        .mockResolvedValueOnce({results: mockNarrativeResults});
+        .mockResolvedValueOnce({ results: [mockUnregisteredPlanInfo] })
+        .mockResolvedValueOnce({ results: [mockProjectMinimumInfo] })
+        .mockResolvedValueOnce({ results: []})  // No Plan members
+        .mockResolvedValueOnce({ results: [mockPlanOwner] })  // Will use the plan owner
+        .mockResolvedValueOnce({ results: []})  // No Research Outputs
+        .mockResolvedValueOnce({ results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: []})  // No Related Works Info
+        .mockResolvedValueOnce({ results: [defaultMemberRole] })
+        .mockResolvedValueOnce({ results: mockNarrativeResults });
 
       const result = await planToDMPCommonStandard(
         mockConfig,

@@ -1,12 +1,13 @@
 import {
-  currentDateAsString,
   areEqual,
-  isNullOrUndefined,
-  randomHex,
   convertMySQLDateTimeToRFC3339,
+  currentDateAsString,
+  isNullOrUndefined,
+  isJSON,
+  isValidDate,
   normaliseHttpProtocol,
+  randomHex,
   removeNullAndUndefinedFromObject,
-  isValidDate
 } from '../general';
 
 describe('isValidDate', () => {
@@ -58,6 +59,54 @@ describe('isValidDate', () => {
 
   it('returns true for dates with time but no timezone', () => {
     expect(isValidDate('2024-01-15 14:30:45')).toBe(true);
+  });
+});
+
+describe('isJSON', () => {
+  it('returns true for valid JSON object string', () => {
+    expect(isJSON('{"name":"test","value":123}')).toBe(true);
+    expect(isJSON('{"nested":{"key":"value"}}')).toBe(true);
+  });
+
+  it('returns true for valid JSON array string', () => {
+    expect(isJSON('[1,2,3]')).toBe(true);
+    expect(isJSON('["a","b","c"]')).toBe(true);
+    expect(isJSON('[]')).toBe(true);
+  });
+
+  it('returns true for valid JSON primitive values', () => {
+    expect(isJSON('"string"')).toBe(true);
+    expect(isJSON('123')).toBe(true);
+    expect(isJSON('true')).toBe(true);
+    expect(isJSON('false')).toBe(true);
+    expect(isJSON('null')).toBe(true);
+  });
+
+  it('returns false for invalid JSON strings', () => {
+    expect(isJSON('not json')).toBe(false);
+    expect(isJSON('undefined')).toBe(false);
+    expect(isJSON('{invalid}')).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isJSON('')).toBe(false);
+  });
+
+  it('returns false for malformed JSON strings', () => {
+    expect(isJSON('{"name":"test"')).toBe(false); // Missing closing brace
+    expect(isJSON('{"name":}')).toBe(false); // Missing value
+    expect(isJSON('{name:"test"}')).toBe(false); // Unquoted key
+    expect(isJSON('{"name":"test",}')).toBe(false); // Trailing comma
+  });
+
+  it('returns false for JSON string with single quotes instead of double quotes', () => {
+    expect(isJSON("{'name':'test'}")).toBe(false);
+  });
+
+  it('returns true for valid nested JSON structures', () => {
+    expect(isJSON('{"user":{"name":"test","age":30,"address":{"city":"NYC"}}}')).toBe(true);
+    expect(isJSON('[{"id":1},{"id":2}]')).toBe(true);
+    expect(isJSON('{"items":[1,2,3],"count":3}')).toBe(true);
   });
 });
 
@@ -157,6 +206,8 @@ describe('convertMySQLDateTimeToRFC3339', () => {
     expect(result).toBe('2024-01-15T14:30:45Z');
   });
 });
+
+
 
 describe('areEqual', () => {
   it('returns true when two identical primitive values are compared', () => {

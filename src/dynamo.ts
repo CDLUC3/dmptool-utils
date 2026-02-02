@@ -1,13 +1,17 @@
 import { Logger } from 'pino';
+import http from "http";
+import { NodeHttpHandler } from "@aws-sdk/node-http-handler";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import {
   AttributeValue,
   DeleteItemCommand,
   DynamoDBClient,
-  DynamoDBClientConfig, PutItemCommand,
+  DynamoDBClientConfig,
+  PutItemCommand,
   QueryCommand,
   QueryCommandOutput,
-  ScanCommand, ScanCommandOutput,
+  ScanCommand,
+  ScanCommandOutput,
 } from "@aws-sdk/client-dynamodb";
 import {
   DMPToolDMPType,
@@ -32,6 +36,7 @@ export interface DynamoConnectionParams {
   logger: Logger;
   region: string;
   tableName: string;
+  endpoint?: string;
   maxAttempts: number;
 }
 
@@ -52,9 +57,8 @@ const EXTENSION_KEYS: string[] = [
   'version',
 ];
 
-interface DMPVersionType {
-  PK: string;
-  SK: string;
+export interface DMPVersionType {
+  dmpId: string;
   modified: string;
 }
 
@@ -82,8 +86,18 @@ class DMPToolDynamoError extends Error {
 const getDynamoDBClient = (
   dynamoConfigParams: DynamoDBClientConfig
 ): DynamoDBClient => {
-  const { region, maxAttempts } = dynamoConfigParams;
-  return new DynamoDBClient({ region, maxAttempts });
+  const { region, maxAttempts, endpoint } = dynamoConfigParams;
+  // If an endpoint was specified, we are running in a local environment
+  return endpoint === undefined
+    ? new DynamoDBClient({ region, maxAttempts })
+    : new DynamoDBClient({
+      region,
+      maxAttempts,
+      endpoint,
+      requestHandler: new NodeHttpHandler({
+        httpAgent: new http.Agent({ keepAlive: true }),
+      }),
+    });
 }
 
 /**
@@ -215,13 +229,14 @@ export const getDMPVersions = async (
 
         if (unmarshalled.PK && unmarshalled.SK && unmarshalled.modified) {
           versions.push({
-            PK: unmarshalled.PK,
-            SK: unmarshalled.SK,
+            dmpId: unmarshalled.PK.replace(`${DMP_PK_PREFIX}#`, 'https://'),
             modified: unmarshalled.modified
           });
         }
       }
-      return versions
+      return versions.sort((a: DMPVersionType, b: DMPVersionType) => {
+        return b.modified.localeCompare(a.modified);
+      });
     }
     return [];
   } catch (err) {
@@ -413,10 +428,9 @@ const getDMPExtensions = async (
       if (Array.isArray(versions) && versions.length > 0) {
         // Return the versions sorted descending
         extension.version = versions
-          .sort((a: DMPVersionType, b: DMPVersionType) => b.modified.localeCompare(a.modified))
-          .map((v: DMPVersionType) => {
+          .map((v: DMPVersionType, idx: number) => {
             // The latest version doesn't have a query param appended to the URL
-            const queryParam = v.SK.endsWith(DMP_LATEST_VERSION)
+            const queryParam = idx === 0
               ? ''
               : `?version=${v.modified}`;
             const dmpIdWithoutProtocol = dmpId.replace(/^https?:\/\//, '');

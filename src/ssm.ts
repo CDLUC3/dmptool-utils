@@ -6,26 +6,36 @@ import {
   GetParameterCommandOutput
 } from "@aws-sdk/client-ssm";
 
+export interface SsmConnectionParams {
+  logger: Logger;
+  region: string;
+  useTLS?: boolean;
+  endpoint?: string;
+}
+
 /**
  * Retrieve a variable from the SSM Parameter store.
  *
- * @param logger The logger to use for logging.
+ * @param connectionParams The connection parameters to use for the SSM client.
  * @param key The name of the variable to retrieve.
  * @param env The environment to retrieve the variable from. Defaults to `EnvironmentEnum.DEV`.
+ * Should be false when running in a local development environment.
  * @returns The value of the variable, or undefined if the variable could not be found.
  * @throws
  */
 export const getSSMParameter = async (
-  logger: Logger,
+  connectionParams: SsmConnectionParams,
   key: string,
-  env: EnvironmentEnum = EnvironmentEnum.DEV
+  env: EnvironmentEnum = EnvironmentEnum.DEV,
 ): Promise<string | undefined> => {
-  if (logger && key && key.trim() !== '') {
-    // Create an SSM client
-    const client = new SSMClient();
+  if (connectionParams.logger && key && key.trim() !== '') {
+    // Create an SSM client (use the endpoint if we are not using TLS - local dev)
+    const client = connectionParams.useTLS
+      ? new SSMClient()
+      : new SSMClient(connectionParams);
 
     const keyPrefix = `/uc3/dmp/tool/${env.toLowerCase()}/`;
-    logger.debug(`Fetching parameter ${keyPrefix}${key}`);
+    connectionParams.logger.debug(`Fetching parameter ${keyPrefix}${key}`);
 
     try {
       const command: GetParameterCommand = new GetParameterCommand({
@@ -38,9 +48,9 @@ export const getSSMParameter = async (
       if (!isNullOrUndefined(response) && !isNullOrUndefined(response.Parameter)) {
         return response.Parameter?.Value;
       }
-      logger.warn(`Parameter ${keyPrefix}${key} not found.`);
+      connectionParams.logger.warn(`Parameter ${keyPrefix}${key} not found.`);
     } catch (error) {
-      logger.fatal(`Error fetching parameter ${keyPrefix}${key}: ${error}`);
+      connectionParams.logger.fatal(`Error fetching parameter ${keyPrefix}${key}: ${error}`);
     }
   }
   return undefined;

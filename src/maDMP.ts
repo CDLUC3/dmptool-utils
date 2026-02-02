@@ -335,7 +335,7 @@ const loadMemberInfo = async (
       LEFT JOIN projectMembers pctr ON pc.projectMemberId = pctr.id
         LEFT JOIN affiliations a ON pctr.affiliationId = a.uri
     WHERE pc.planId = ?
-    GROUP BY a.uri, a.name, pctr.email, pctr.givenName, pctr.surName,
+    GROUP BY pc.id, a.uri, a.name, pctr.email, pctr.givenName, pctr.surName,
       pctr.orcid, pc.isPrimaryContact;
   `;
 
@@ -489,7 +489,8 @@ const loadNarrativeTemplateInfo = async (
            t.version templateVersion,
            s.id sectionId, s.name sectionTitle, s.introduction sectionDescription,
            s.displayOrder sectionOrder, q.id questionId, q.questionText questionText,
-           q.displayOrder questionOrder, a.id answerId, a.json answerJSON
+           q.json questionJSON, q.displayOrder questionOrder,
+           a.id answerId, a.json answerJSON
     FROM plans p
       INNER JOIN versionedTemplates t ON p.versionedTemplateId = t.id
         LEFT JOIN versionedSections s ON s.versionedTemplateId = t.id
@@ -544,14 +545,12 @@ const loadNarrativeTemplateInfo = async (
       }
 
       if (row.questionId !== null && row.questionId !== undefined) {
-        const hasAnswer = row.answerJSON !== undefined && row.answerJSON !== null;
-
         // Every row in the results represents a single question/answer pair
         curSection.question.push({
           id: row.questionId,
           text: row.questionText,
           order: row.questionOrder !== null ? row.questionOrder : 0,
-          answer: hasAnswer
+          answer: row.answerJSON !== null && row.answerJSON !== undefined
             ? {
               id: row.answerId,
               json: row.answerJSON
@@ -561,7 +560,6 @@ const loadNarrativeTemplateInfo = async (
       }
     }
   });
-
   return narrative;
 }
 
@@ -1169,6 +1167,7 @@ const cleanRDACommonStandard = (
  * @param domainName the domain name of the application/service website
  * @param planId the ID of the plan to generate the DMP for
  * @param env The environment from EnvironmentEnum (defaults to EnvironmentEnum.DEV)
+ * @param includeExtensions whether to include the DMP Tool extensions. Defaults to true.
  * @returns a JSON representation of the DMP
  */
 export async function planToDMPCommonStandard(
@@ -1176,7 +1175,8 @@ export async function planToDMPCommonStandard(
   applicationName: string,
   domainName: string,
   env: EnvironmentEnum = EnvironmentEnum.DEV,
-  planId: number
+  planId: number,
+  includeExtensions = true
 ): Promise<DMPToolDMPType | undefined> {
   if (!rdsConnectionParams || !applicationName || !domainName || !planId) {
     throw new Error('Invalid arguments provided to planToDMPCommonStandard');
@@ -1324,14 +1324,16 @@ export async function planToDMPCommonStandard(
   const cleaned: DMPToolDMPType = cleanRDACommonStandard(plan, dmp);
 
   // Generate the DMP Tool extensions to the RDA Common Standard
-  const extensions: DMPToolExtensionType = await buildDMPToolExtensions(
-    rdsConnectionParams,
-    applicationName,
-    domainName,
-    plan,
-    project,
-    funding
-  );
+  const extensions: DMPToolExtensionType | undefined = includeExtensions
+    ? await buildDMPToolExtensions(
+        rdsConnectionParams,
+        applicationName,
+        domainName,
+        plan,
+        project,
+        funding
+      )
+    : undefined;
 
   rdsConnectionParams.logger.debug(
     { applicationName, domainName, planId, env, dmpId: plan.dmpId },
@@ -1339,10 +1341,12 @@ export async function planToDMPCommonStandard(
   );
 
   // Return the combined DMP metadata record
-  return {
-    dmp: {
-      ...validateRDACommonStandard(rdsConnectionParams.logger, cleaned).dmp,
-      ...validateDMPToolExtensions(rdsConnectionParams.logger, plan.dmpId, extensions),
+  return includeExtensions && extensions
+  ? {
+      dmp: {
+        ...validateRDACommonStandard(rdsConnectionParams.logger, cleaned).dmp,
+        ...validateDMPToolExtensions(rdsConnectionParams.logger, plan.dmpId, extensions),
+      }
     }
-  };
+  : validateRDACommonStandard(rdsConnectionParams.logger, cleaned);
 }

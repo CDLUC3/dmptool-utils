@@ -1172,7 +1172,7 @@ describe('tombstoneDMP', () => {
       status: 'complete',
       tombstoned: newDate,
       version: [{
-        access_url: `https://${mockDomain}/dmps/${mockDmpId}?version=${newDate}`,
+        access_url: `https://${mockDomain}/dmps/${mockDmpId}`,
         version: newDate
       }]
     }

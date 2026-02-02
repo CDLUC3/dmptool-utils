@@ -128,6 +128,21 @@ export const removeNullAndUndefinedFromObject = (obj: any): any =>  {
 }
 
 /**
+ * Function to check if a string is a valid JSON string.
+ *
+ * @param str The string to check.
+ * @returns True if the string is a valid JSON string, false otherwise.
+ */
+export const isJSON = (str: string): boolean => {
+  try {
+    JSON.parse(str);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Function to test for equality between two objects, arrays or primitives
  *
  * @param a An object (may contain nested objects and arrays)
