@@ -797,12 +797,15 @@ The code will use that value to construct the appropriate prefix for the key. Fo
 ```typescript
 import {EnvironmentEnum, initializeLogger, getSSMParameter, LogLevelEnum } from '@dmptool/utils';
 
-process.env.AWS_REGION = 'us-west-2';
-
 // Initialize a logger
 const logger: Logger = initializeLogger('exampleSSM', LogLevelEnum.DEBUG);
 
 const paramName = 'RdsDatabase';
+
+const configParams = {
+  logger,
+  region: process.env.AWS_REGION,
+}
 
 const response = await getSSMParameter(logger, paramName, EnvironmentEnum.DEV);
 
