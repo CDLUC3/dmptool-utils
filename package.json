@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,9 +31,6 @@
     "trivy-high": "./scripts/trivy-high.sh",
     "trivy-med": "./scripts/trivy-med.sh"
   },
-  "overrides": {
-    "fast-xml-parser": "5.3.4"
-  },
   "dependencies": {
     "@dmptool/types": "2.3.2",
     "@elastic/ecs-pino-format": "^1.5.0",
@@ -45,14 +42,14 @@
   },
   "peerDependencies": {
     "@aws-sdk/client-cloudformation": "^3.980.0",
-    "@aws-sdk/client-dynamodb": "^3.980.0",
-    "@aws-sdk/client-s3": "^3.980.0",
-    "@aws-sdk/client-sns": "^3.980.0",
-    "@aws-sdk/client-sqs": "^3.980.0",
-    "@aws-sdk/client-ssm": "^3.980.0",
-    "@aws-sdk/node-http-handler": "^3.370.0",
-    "@aws-sdk/s3-request-presigner": "^3.980.0",
-    "@aws-sdk/util-dynamodb": "^3.980.0"
+    "@aws-sdk/client-dynamodb": "^3.983.0",
+    "@aws-sdk/client-s3": "^3.983.0",
+    "@aws-sdk/client-sns": "^3.983.0",
+    "@aws-sdk/client-sqs": "^3.983.0",
+    "@aws-sdk/client-ssm": "^3.983.0",
+    "@aws-sdk/node-http-handler": "^3.374.0",
+    "@aws-sdk/s3-request-presigner": "^3.983.0",
+    "@aws-sdk/util-dynamodb": "^3.983.0"
   },
   "devDependencies": {
     "@aws-sdk/util-stream-node": "^3.370.0",
