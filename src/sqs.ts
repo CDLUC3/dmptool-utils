@@ -35,7 +35,7 @@ export const sendMessage = async (
   region = 'us-west-2',
   useTLS = true // Should be false when running in a local dev environment
 ): Promise<SendMessageResponse> => {
-  let errMsg = '';
+  let errMsg: string;
 
   if (logger && queueURL) {
     // Create a new SQS client instance

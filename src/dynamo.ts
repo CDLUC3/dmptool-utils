@@ -1,6 +1,6 @@
 import { Logger } from 'pino';
 import http from "http";
-import { NodeHttpHandler } from "@aws-sdk/node-http-handler";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import {
   AttributeValue,
@@ -264,9 +264,6 @@ export const getDMPVersions = async (
  * metadata or an empty array if none were found.
  * @throws DMPToolDynamoError if the records could not be fetched due to an error
  */
-// Fetch the specified DMP metadata record
-//   - Version is optional, if it is not provided, ALL versions will be returned
-//   - If you just want the latest version, use the DMP_LATEST_VERSION constant
 export const getDMPs = async (
   dynamoConnectionParams: DynamoConnectionParams,
   domainName: string,
@@ -278,7 +275,7 @@ export const getDMPs = async (
     throw new DMPToolDynamoError('Missing Dynamo config or DMP ID');
   }
 
-  let params = {};
+  let params;
 
   if (version) {
     params = {
@@ -382,7 +379,7 @@ const getDMPExtensions = async (
     throw new DMPToolDynamoError('Missing Dynamo Config or DMP ID');
   }
 
-  let params = {};
+  let params;
 
   if (version) {
     params = {
