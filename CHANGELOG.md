@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+# v1.0.41
+- Added override for minimatch and upgrade all dependencies
+
 # v1.0.6
 - Removed all references to `process.env` and instead added those values as input arguments
 

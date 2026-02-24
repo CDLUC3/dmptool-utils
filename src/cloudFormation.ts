@@ -69,6 +69,7 @@ export const getExport = async (
   } catch (error) {
     const errMsg: string = toErrorMessage(error);
     logger.fatal({ name, error: errMsg }, 'Error fetching CloudFormation export');
+    //eslint-disable-next-line preserve-caught-error
     throw new Error(errMsg);
   }
 }
