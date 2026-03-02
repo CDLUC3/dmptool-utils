@@ -32,7 +32,7 @@
     "trivy-med": "./scripts/trivy-med.sh"
   },
   "overrides": {
-    "minimatch": "10.2.1"
+    "minimatch": "10.2.4"
   },
   "dependencies": {
     "@dmptool/types": "^3.1.2",
