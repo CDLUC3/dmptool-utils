@@ -1,5 +1,9 @@
 # dmptool-aws CHANGELOG
 
+## v1.0.43
+- Update `aws-sdk` dependencies and add override for `fast-xml-parser`
+- Remove outdated override for `minimatch`
+
 ## v1.0.42
 - Updated override for `minimatch` and upgraded all dependencies
 - Updated `renovate` config
