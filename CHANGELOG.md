@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v1.0.44
+- Updated `loadNarrativeTemplateInfo` to return `customSections` and `customQuestions` data
+
 ## v1.0.43
 - Update `aws-sdk` dependencies and add override for `fast-xml-parser`
 - Remove outdated override for `minimatch`
