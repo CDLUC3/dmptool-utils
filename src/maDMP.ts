@@ -776,7 +776,6 @@ const loadNarrativeTemplateInfo = async (
   // Step 2: fetch custom sections/questions in parallel (only if a customization exists)
   let customSectionRows: { results: any[], fields: any[] } = { results: [], fields: [] };
   let customQuestionRows: { results: any[], fields: any[] } = { results: [], fields: [] };
-      console.log("***[DEBUG] templateCustomizationId:", templateCustomizationId);
   if (templateCustomizationId) {
     rdsConnectionParams.logger.debug(
       { planId, templateCustomizationId },
@@ -788,8 +787,6 @@ const loadNarrativeTemplateInfo = async (
       queryTable(rdsConnectionParams, SQL_NARRATIVE_CUSTOM_QUESTIONS,
         [planId.toString(), templateCustomizationId.toString()]),
     ]);
-             console.log('[DEBUG] customSectionRows:', JSON.stringify(customSectionRows.results, null, 2));
-    console.log('[DEBUG] customQuestionRows:', JSON.stringify(customQuestionRows.results, null, 2));
   }
 
   // Step 3: build base structure
