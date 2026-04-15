@@ -281,14 +281,16 @@ interface DMPExtensionNarrativeAnswer {
   json: AnyAnswerType;
 }
 
-interface DMPExtensionNarrativeQuestion {
+export interface DMPExtensionNarrativeQuestion {
+  type: 'BASE' | 'CUSTOM';
   id: number;
   text: string;
   order: number;
   answer?: DMPExtensionNarrativeAnswer
 }
 
-interface DMPExtensionNarrativeSection {
+export interface DMPExtensionNarrativeSection {
+  type: 'BASE' | 'CUSTOM';
   id: number;
   title: string;
   description?: string;

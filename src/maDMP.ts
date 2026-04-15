@@ -33,6 +33,8 @@ import {
   DMPExtensionFunderOpportunityType,
   DMPExtensionFunderProjectType,
   DMPExtensionNarrative,
+  DMPExtensionNarrativeSection,
+  DMPExtensionNarrativeQuestion,
   LoadFundingInfo,
   LoadMemberInfo,
   LoadPlanInfo,
@@ -479,89 +481,332 @@ const loadRelatedWorksInfo = async (
  * @param planId the Plan ID to fetch the narrative information for
  * @returns the DMP Tool Narrative extension for the DMP
  */
+
+// Fetches the BASE narrative information (template/sections/questions) for the Plan.
+const SQL_NARRATIVE_BASE = `
+  SELECT t.id templateId, t.name templateTitle, t.description templateDescription,
+         t.version templateVersion,
+         s.id sectionId, s.name sectionTitle, s.introduction sectionDescription,
+         s.displayOrder sectionOrder, q.id questionId, q.questionText questionText,
+         q.json questionJSON, q.displayOrder questionOrder,
+         a.id answerId, a.json answerJSON
+  FROM plans p
+    INNER JOIN versionedTemplates t ON p.versionedTemplateId = t.id
+      LEFT JOIN versionedSections s ON s.versionedTemplateId = t.id
+        LEFT JOIN versionedQuestions q ON q.versionedSectionId = s.id
+          LEFT JOIN answers a ON a.versionedQuestionId = q.id AND p.id = a.planId
+  WHERE p.id = ?
+  ORDER BY s.displayOrder, q.displayOrder;
+`;
+
+// Fetches the PUBLISHED templateCustomizationId for the plan creator's org (if one exists).
+const SQL_NARRATIVE_CUSTOMIZATION_ID = `
+  SELECT tc.id AS templateCustomizationId
+  FROM plans p
+    JOIN users u ON p.createdById = u.id
+    JOIN versionedTemplates vt ON p.versionedTemplateId = vt.id
+    JOIN templateCustomizations tc
+      ON tc.templateId = vt.templateId
+      AND tc.affiliationId = u.affiliationId
+      AND tc.status = 'PUBLISHED'
+  WHERE p.id = ?
+  LIMIT 1;
+`;
+
+// Fetches the CUSTOM section narrative information for the Plan.
+// This includes the pinning information needed to correctly inject the custom 
+// sections/questions into the BASE structure.
+const SQL_NARRATIVE_CUSTOM_SECTIONS = `
+  SELECT
+    vcs.id AS versionedCustomSectionId,
+    vcs.customSectionId,
+    vcs.name AS customSectionName,
+    vcs.pinnedVersionedSectionType AS pinSectionType,
+    vcs.pinnedVersionedSectionId AS pinSectionId,
+    vcq.id AS versionedCustomQuestionId,
+    vcq.customQuestionId,
+    vcq.questionText AS customQuestionText,
+    vcq.json AS customQuestionJSON,
+    vcq.pinnedVersionedQuestionType AS pinQuestionType,
+    vcq.pinnedVersionedQuestionId AS pinQuestionId,
+    a.id AS answerId,
+    a.json AS answerJSON
+  FROM versionedTemplateCustomizations vtc
+    JOIN versionedCustomSections vcs
+      ON vcs.versionedTemplateCustomizationId = vtc.id
+      LEFT JOIN versionedCustomQuestions vcq
+        ON vcq.versionedTemplateCustomizationId = vtc.id
+        AND vcq.versionedSectionType = 'CUSTOM'
+        AND vcq.versionedSectionId = vcs.id
+        LEFT JOIN answers a
+          ON a.versionedCustomSectionId = vcs.id
+          AND a.versionedCustomQuestionId = vcq.id
+          AND a.planId = ?
+  WHERE vtc.templateCustomizationId = ? AND vtc.active = 1
+  ORDER BY vcs.pinnedVersionedSectionType, vcs.pinnedVersionedSectionId,
+           vcq.pinnedVersionedQuestionType, vcq.pinnedVersionedQuestionId;
+`;
+
+// Fetches the CUSTOM question narrative information for the Plan that are pinned to BASE sections.
+// Any pinned to Custom sections are retrieved from above query.
+const SQL_NARRATIVE_CUSTOM_QUESTIONS = `
+  SELECT
+    vcq.id AS versionedCustomQuestionId,
+    vcq.customQuestionId,
+    vcq.questionText AS customQuestionText,
+    vcq.json AS customQuestionJSON,
+    vcq.versionedSectionId AS baseSectionId,
+    vcq.pinnedVersionedQuestionType AS pinQuestionType,
+    vcq.pinnedVersionedQuestionId AS pinQuestionId,
+    a.id AS answerId,
+    a.json AS answerJSON
+  FROM versionedTemplateCustomizations vtc
+    JOIN versionedCustomQuestions vcq
+      ON vcq.versionedTemplateCustomizationId = vtc.id
+      AND vcq.versionedSectionType = 'BASE'
+      LEFT JOIN answers a
+        ON a.versionedSectionId = vcq.versionedSectionId
+        AND a.versionedCustomQuestionId = vcq.id
+        AND a.planId = ?
+  WHERE vtc.templateCustomizationId = ? AND vtc.active = 1
+  ORDER BY vcq.pinnedVersionedQuestionType, vcq.pinnedVersionedQuestionId;
+`;
+
+/**
+ * Builds the base DMPExtensionNarrative structure from SQL_NARRATIVE_BASE rows.
+ * Sections and questions are typed as BASE.
+ */
+function buildBaseNarrative(rows: any[]): DMPExtensionNarrative {
+  const first = rows[0];
+  const narrative: DMPExtensionNarrative = {
+    id: first.templateId,
+    title: first.templateTitle,
+    description: first.templateDescription ?? undefined,
+    version: first.templateVersion,
+    section: [],
+  };
+
+  const sectionMap = new Map<number, DMPExtensionNarrativeSection>();
+
+  for (const row of rows) {
+    if (row.sectionId == null) continue;
+
+    let section = sectionMap.get(row.sectionId);
+    if (!section) {
+      section = {
+        type: 'BASE',
+        id: row.sectionId,
+        title: row.sectionTitle,
+        description: row.sectionDescription ?? undefined,
+        order: row.sectionOrder ?? 0,
+        question: [],
+      };
+      sectionMap.set(row.sectionId, section);
+      narrative.section.push(section);
+    }
+
+    if (row.questionId != null) {
+      section.question.push({
+        type: 'BASE',
+        id: row.questionId,
+        text: row.questionText,
+        order: row.questionOrder ?? 0,
+        answer: row.answerJSON != null
+          ? { id: row.answerId, json: row.answerJSON }
+          : undefined,
+      });
+    }
+  }
+
+  return narrative;
+}
+
+/**
+ * Splices custom sections (and their nested custom questions) from
+ * SQL_NARRATIVE_CUSTOM_SECTIONS rows into the sections array using pin logic.
+ *
+ * Pin logic:
+ *  - null pinSectionId → unshift to front
+ *  - otherwise find the section where type === pinSectionType && id === pinSectionId,
+ *    then splice in immediately after it (fallback: push to end)
+ *
+ * Rows are already ordered by pinnedVersionedSectionType / pinnedVersionedSectionId
+ * from the SQL ORDER BY clause, which ensures sequential pinning works correctly.
+ */
+function injectCustomSections(
+  sections: DMPExtensionNarrativeSection[],
+  customRows: any[]
+): void {
+  // Group rows by versionedCustomSectionId to build section objects with nested questions
+  const sectionMap = new Map<number, DMPExtensionNarrativeSection>();
+  const sectionOrder: number[] = [];
+
+  for (const row of customRows) {
+    if (row.versionedCustomSectionId == null) continue;
+
+    if (!sectionMap.has(row.versionedCustomSectionId)) {
+      sectionMap.set(row.versionedCustomSectionId, {
+        type: 'CUSTOM',
+        id: row.versionedCustomSectionId,
+        title: row.customSectionName,
+        order: 0,
+        question: [],
+      });
+      sectionOrder.push(row.versionedCustomSectionId);
+    }
+
+    if (row.versionedCustomQuestionId != null) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      sectionMap.get(row.versionedCustomSectionId)!.question.push({
+        type: 'CUSTOM',
+        id: row.versionedCustomQuestionId,
+        text: row.customQuestionText,
+        order: 0,
+        answer: row.answerJSON != null
+          ? { id: row.answerId, json: row.answerJSON }
+          : undefined,
+      });
+    }
+  }
+
+  // Inject each custom section in the order determined by the SQL ordering
+  for (const sectionId of sectionOrder) {
+    const newSection = sectionMap.get(sectionId);
+    if (!newSection) continue;
+    // Use the first row for this section to get pin metadata
+    const pinRow = customRows.find(r => r.versionedCustomSectionId === sectionId);
+
+    if (pinRow.pinSectionId == null) {
+      sections.unshift(newSection);
+    } else {
+      const index = sections.findIndex(
+        s => s.type === pinRow.pinSectionType && s.id === pinRow.pinSectionId
+      );
+      if (index !== -1) {
+        sections.splice(index + 1, 0, newSection);
+      } else {
+        sections.push(newSection);
+      }
+    }
+  }
+}
+
+/**
+ * Splices custom questions from SQL_NARRATIVE_CUSTOM_QUESTIONS rows into their
+ * respective BASE sections using pin logic.
+ *
+ * Pin logic:
+ *  - null pinQuestionId → unshift within the target section
+ *  - otherwise find the question where type === pinQuestionType && id === pinQuestionId,
+ *    then splice in immediately after it (fallback: push to end of section)
+ *
+ * Rows are already ordered by pinnedVersionedQuestionType / pinnedVersionedQuestionId
+ * from the SQL ORDER BY clause, which ensures sequential pinning works correctly.
+ */
+function injectCustomQuestionsIntoBaseSections(
+  sections: DMPExtensionNarrativeSection[],
+  customRows: any[]
+): void {
+  for (const row of customRows) {
+    const section = sections.find(s => s.type === 'BASE' && s.id === row.baseSectionId);
+
+    const newQuestion: DMPExtensionNarrativeQuestion = {
+      type: 'CUSTOM',
+      id: row.versionedCustomQuestionId,
+      text: row.customQuestionText,
+      order: 0,
+      answer: row.answerJSON != null
+        ? { id: row.answerId, json: row.answerJSON }
+        : undefined,
+    };
+
+    if (!section) {
+      sections[sections.length - 1]?.question.push(newQuestion);
+    } else if (row.pinQuestionId == null) {
+      section.question.unshift(newQuestion);
+    } else {
+      const pinIdx = section.question.findIndex(
+        q => q.type === row.pinQuestionType && q.id === row.pinQuestionId
+      );
+      if (pinIdx !== -1) {
+        section.question.splice(pinIdx + 1, 0, newQuestion);
+      } else {
+        section.question.push(newQuestion);
+      }
+    }
+  }
+}
+
+/**
+ * Renumbers section and question display orders sequentially (0-based) after
+ * all custom sections and questions have been injected.
+ */
+function renumberOrders(sections: DMPExtensionNarrativeSection[]): void {
+  let sectionOrder = 1;
+  for (const section of sections) {
+    section.order = sectionOrder++;
+    let questionOrder = 1;
+    for (const question of section.question) {
+      question.order = questionOrder++;
+    }
+  }
+}
+
+/**
+ * Builds the DMP Tool Narrative extension for the DMP
+ *
+ * @param rdssConnectionParams the connection parameters for the MySQL database
+ * @param planId the Plan ID to fetch the narrative information for
+ * @returns the DMP Tool Narrative extension for the DMP
+ */
 const loadNarrativeTemplateInfo = async (
   rdsConnectionParams: ConnectionParams,
   planId: number
 ): Promise<DMPExtensionNarrative | undefined> => {
-  // Fetch the template, sections, questions and answers all at once
-  const sql = `
-    SELECT t.id templateId, t.name templateTitle, t.description templateDescription,
-           t.version templateVersion,
-           s.id sectionId, s.name sectionTitle, s.introduction sectionDescription,
-           s.displayOrder sectionOrder, q.id questionId, q.questionText questionText,
-           q.json questionJSON, q.displayOrder questionOrder,
-           a.id answerId, a.json answerJSON
-    FROM plans p
-      INNER JOIN versionedTemplates t ON p.versionedTemplateId = t.id
-        LEFT JOIN versionedSections s ON s.versionedTemplateId = t.id
-          LEFT JOIN versionedQuestions q ON q.versionedSectionId = s.id
-            LEFT JOIN answers a ON a.versionedQuestionId = q.id AND p.id = a.planId
-    WHERE p.id = ?
-    ORDER BY s.displayOrder, q.displayOrder;
-  `;
+  // Step 1: base data and customization ID lookup in parallel
+  rdsConnectionParams.logger.debug({ planId }, 'Fetching narrative base information');
+  const [baseRows, customizationIdRow] = await Promise.all([
+    queryTable(rdsConnectionParams, SQL_NARRATIVE_BASE, [planId.toString()]),
+    queryTable(rdsConnectionParams, SQL_NARRATIVE_CUSTOMIZATION_ID, [planId.toString()]),
+  ]);
+  if (!baseRows?.results?.length) return undefined;
 
-  rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching narrative information');
-  const resp = await queryTable(
-    rdsConnectionParams,
-    sql,
-    [planId.toString()]
-  );
+  const templateCustomizationId = customizationIdRow?.results?.[0]?.templateCustomizationId ?? null;
 
-  let results = [];
-  // Filter out any null or undefined results
-  if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
-    results = resp.results.filter((row) => !isNullOrUndefined(row));
+  // Step 2: fetch custom sections/questions in parallel (only if a customization exists)
+  let customSectionRows: { results: any[], fields: any[] } = { results: [], fields: [] };
+  let customQuestionRows: { results: any[], fields: any[] } = { results: [], fields: [] };
+  if (templateCustomizationId) {
+    rdsConnectionParams.logger.debug(
+      { planId, templateCustomizationId },
+      'Fetching narrative customization information'
+    );
+    [customSectionRows, customQuestionRows] = await Promise.all([
+      queryTable(rdsConnectionParams, SQL_NARRATIVE_CUSTOM_SECTIONS,
+        [planId.toString(), templateCustomizationId.toString()]),
+      queryTable(rdsConnectionParams, SQL_NARRATIVE_CUSTOM_QUESTIONS,
+        [planId.toString(), templateCustomizationId.toString()]),
+    ]);
   }
 
-  if (!Array.isArray(results) || results.length === 0) {
-    return undefined;
-  }
+  // Step 3: build base structure
+  const narrative = buildBaseNarrative(baseRows.results);
 
-  const narrative: DMPExtensionNarrative = {
-    id: results[0].templateId,
-    title: results[0].templateTitle,
-    description: results[0].templateDescription !== null ? results[0].templateDescription : undefined,
-    version: results[0].templateVersion,
-    section: [],
-  };
+  // Step 4: inject custom sections using pin logic
+  //   pin target: type === pinSectionType && id === pinSectionId (from versionedSections)
+  //   null pinSectionId → unshift to front
+  injectCustomSections(narrative.section, customSectionRows.results);
 
-  results.forEach((row) => {
-    if (row.sectionId !== null && row.sectionId !== undefined) {
-      // Sections may have several rows in the results, so we need to check if we
-      // already have the section defined.
-      let curSection = narrative.section.find((s) => {
-        return s.id === row.sectionId;
-      });
+  // Step 5: inject custom questions into base sections using pin logic
+  //   baseSectionId matches versionedSections.id in the existing section array
+  //   null pinQuestionId → unshift within that section
+  injectCustomQuestionsIntoBaseSections(narrative.section, customQuestionRows.results);
 
-      if (curSection === undefined || curSection === null) {
-        curSection = {
-          id: row.sectionId,
-          title: row.sectionTitle,
-          description: row.sectionDescription !== null ? row.sectionDescription : undefined,
-          order: row.sectionOrder !== null ? row.sectionOrder : 0,
-          question: [],
-        };
-        narrative.section.push(curSection);
-      }
+  // Step 6: renumber display orders sequentially
+  renumberOrders(narrative.section);
 
-      if (row.questionId !== null && row.questionId !== undefined) {
-        // Every row in the results represents a single question/answer pair
-        curSection.question.push({
-          id: row.questionId,
-          text: row.questionText,
-          order: row.questionOrder !== null ? row.questionOrder : 0,
-          answer: row.answerJSON !== null && row.answerJSON !== undefined
-            ? {
-              id: row.answerId,
-              json: row.answerJSON
-            }
-            : undefined
-        });
-      }
-    }
-  });
   return narrative;
-}
+};
 
 /**
  * Builds the RDA Common Standard Contact entry for the DMP
