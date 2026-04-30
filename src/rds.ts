@@ -80,7 +80,7 @@ const prepareValue = (val: any, type: any): any => {
 export const queryTable = async (
   connectionParams: ConnectionParams,
   query: string,
-  params: any[] = []
+  params: any = []
 ): Promise<{ results: any[], fields: any[] }> => {
   try {
     if (!connectionParams || !connectionParams || !query || query.trim() === '') {
@@ -92,7 +92,9 @@ export const queryTable = async (
     // Remove all tabs and new lines
     const sql: string = query.split(/[\s\t\n]+/).join(' ');
     // Prepare the values for the query
-    const vals: any[] = params.map((val: any) => prepareValue(val, typeof val));
+    const vals: any = Array.isArray(params)
+      ? params.map((val: any) => prepareValue(val, typeof val)) // positional parameters
+      : params; // named parameters
 
     // Run the query and then close the connection
     connectionParams.logger.debug({ query, params }, 'Running MySQL query');

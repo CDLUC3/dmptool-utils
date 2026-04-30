@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v2.0.3
+- Updated RDS query to accepted both positional and named parameters
+
 ## v2.0.2
 - Updated dependencies
 
