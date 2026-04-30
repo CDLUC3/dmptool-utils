@@ -45,7 +45,7 @@ describe('queryTable', () => {
     expect(mockEnd).toHaveBeenCalled();
   });
 
-  it('should execute a query with parameters', async () => {
+  it('should execute a query with positional parameters', async () => {
     const mockResults = [{id: 1, name: 'test'}];
     const mockFields = [{name: 'id'}, {name: 'name'}];
     mockQuery.mockResolvedValue([mockResults, mockFields]);
@@ -54,6 +54,18 @@ describe('queryTable', () => {
 
     expect(result).toEqual({results: mockResults, fields: mockFields});
     expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM users WHERE id = ?', [1]);
+    expect(mockEnd).toHaveBeenCalled();
+  });
+
+  it('should execute a query with named parameters', async () => {
+    const mockResults = [{id: 1, name: 'test'}];
+    const mockFields = [{name: 'id'}, {name: 'name'}];
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
+
+    const result = await queryTable(mockConfig, 'SELECT * FROM users WHERE id = :id', { id: 1 });
+
+    expect(result).toEqual({results: mockResults, fields: mockFields});
+    expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM users WHERE id = :id', { id: 1 });
     expect(mockEnd).toHaveBeenCalled();
   });
 

@@ -450,7 +450,7 @@ const loadRelatedWorksInfo = async (
     FROM relatedWorks rw
       JOIN workVersions wv ON rw.workVersionId = wv.id
         JOIN works w ON wv.workId = w.id
-    WHERE rw.planId = ?;
+    WHERE rw.planId = ? AND rw.status = 'ACCEPTED';
   `;
 
   rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching related works information');
@@ -514,7 +514,7 @@ const SQL_NARRATIVE_CUSTOMIZATION_ID = `
 `;
 
 // Fetches the CUSTOM section narrative information for the Plan.
-// This includes the pinning information needed to correctly inject the custom 
+// This includes the pinning information needed to correctly inject the custom
 // sections/questions into the BASE structure.
 const SQL_NARRATIVE_CUSTOM_SECTIONS = `
   SELECT
