@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v2.0.2
+- Updated dependencies
+
 ## v2.0.1
 - Update `maDMP` to only include Related Works that have been `ACCEPTED`
 - Updated RDS connection to allow for named parameters instead of just `?` placeholders
