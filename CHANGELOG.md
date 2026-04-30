@@ -1,5 +1,9 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.0
+- Added `executeTable` to RDS to support UPDATE, INSERT and DELETE operations
+- Refactored `prepareValue` function to work with both named and positional parameters and to let mysql2 handle SQL injection
+
 ## v2.0.3
 - Updated RDS query to accepted both positional and named parameters
 
