@@ -28,7 +28,8 @@ const createConnection = async (
     user,
     password,
     database,
-    multipleStatements: false
+    multipleStatements: false,
+    namedPlaceholders: true
   });
 };
 
