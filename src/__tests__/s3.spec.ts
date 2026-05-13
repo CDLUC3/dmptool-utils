@@ -7,8 +7,7 @@ jest.mock("@aws-sdk/s3-request-presigner", () => ({
 import pino, { Logger } from 'pino';
 import { Readable } from "stream";
 import { mockClient } from "aws-sdk-client-mock";
-import { sdkStreamMixin } from "@smithy/util-stream";
-
+import { sdkStreamMixin } from "@aws-sdk/util-stream-node";
 import {
   listObjects,
   getObject,
@@ -36,7 +35,7 @@ describe('listObjects', () => {
   it('raises errors', async () => {
     s3Mock.on(ListObjectsV2Command).rejects(new Error('Test S3 error'));
 
-    await expect(listObjects(mockLogger, 'TestBucket', '/files')).rejects.toThrow('Test S3 error');
+    await expect(listObjects(mockLogger,'TestBucket', '/files')).rejects.toThrow('Test S3 error');
   });
 
   it('it returns an empty array if no bucket is specified', async () => {
