@@ -1,5 +1,10 @@
 # dmptool-aws CHANGELOG
 
+## v2.0.4
+- Removed `ts-node-dev`, `ts-node`, and `jest-expect-message` from `package.json` since they are not used in this app. Plus `ts-node-dev` and `jest-expect-message` have not been updated for over three years.
+- Replaced `@aws-sdk/util-stream-node` with `@smithy/util-stream`. `@aws-sdk/util-stream-node` was deprecated as part of a move to decouple the core SDK components from AWS-specific namespace. These generic utilities now live under the @smithy namespace.
+- Updated version of `fast-xml-builder` to `v1.2.0` to address security vulnerability
+
 ## v2.0.3
 - Updated RDS query to accepted both positional and named parameters
 
