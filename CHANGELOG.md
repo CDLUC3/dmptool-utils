@@ -1,8 +1,12 @@
 # dmptool-aws CHANGELOG
 
-## v2.1.0
+## v2.1.1
 - Added `executeTable` to RDS to support UPDATE, INSERT and DELETE operations
 - Refactored `prepareValue` function to work with both named and positional parameters and to let mysql2 handle SQL injection
+
+## v2.0.4
+- Removed `ts-node-dev`, `ts-node`, and `jest-expect-message` from `package.json` since they are not used in this app. Plus `ts-node-dev` and `jest-expect-message` have not been updated for over three years.
+- Replaced `@aws-sdk/util-stream-node` with `@smithy/util-stream`. `@aws-sdk/util-stream-node` was deprecated as part of a move to decouple the core SDK components from AWS-specific namespace. These generic utilities now live under the @smithy namespace.
 
 ## v2.0.3
 - Updated RDS query to accepted both positional and named parameters
