@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.1
+- Bump version to 2.1.1 to bring us back in line with rogue v2.1.0 which was deployed to test changes to MySQL RDS
+
 ## v2.0.4
 - Removed `ts-node-dev`, `ts-node`, and `jest-expect-message` from `package.json` since they are not used in this app. Plus `ts-node-dev` and `jest-expect-message` have not been updated for over three years.
 - Replaced `@aws-sdk/util-stream-node` with `@smithy/util-stream`. `@aws-sdk/util-stream-node` was deprecated as part of a move to decouple the core SDK components from AWS-specific namespace. These generic utilities now live under the @smithy namespace.
