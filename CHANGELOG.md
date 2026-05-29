@@ -1,5 +1,9 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.2
+- Added `getPresignedURLForImageUpload` function to `s3.ts` for generating presigned POST URLs for image uploads
+- Installed `@aws-sdk/s3-presigned-post@3.1039.0` dependency
+
 ## v2.1.1
 - Bump version to 2.1.1 to bring us back in line with rogue v2.1.0 which was deployed to test changes to MySQL RDS
 

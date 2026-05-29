@@ -1,5 +1,6 @@
 import { Logger } from 'pino';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import {
   S3Client,
   ListObjectsV2Command,
@@ -172,4 +173,57 @@ export const getPresignedURL = async (
     }
   }
   return undefined;
+}
+
+/**
+ * Generate a Pre-signed URL for an S3 object upload.
+ *
+ * @param logger The logger to use for logging.
+ * @param bucket The name of the bucket to generate the URL for.
+ * @param key The key of the object to generate the URL for.
+ * @param contentType The content type of the object.
+ * @param region The region to generate the URL in. Defaults to 'us-west-2'.
+ * @returns An object containing the Pre-signed URL and, or undefined if the bucket or key are invalid.
+ */
+export const getPresignedURLForImageUpload = async (
+  logger: Logger,
+  bucket: string,
+  key: string,
+  contentType: string,
+  region = 'us-west-2'
+): Promise<{ url: string, fields: string } | undefined> => {
+  if (!logger || !bucket || !key || bucket.trim() === '' || key.trim() === '') {
+    return undefined;
+  }
+
+  const s3Client = new S3Client({ region });
+  const expiresIn = 300; // URL expires in 5 minutes
+  const maxFileSize = 2097152; // 2 MB max file size
+
+  try {
+    const { url, fields } = await createPresignedPost(s3Client, {
+      Bucket: bucket,
+      Key: key,
+      Conditions: [
+        ["starts-with", "$Content-Type", "image/"],
+        ["content-length-range", 0, maxFileSize], // 2 MB max file size
+      ],
+      Fields: {
+        "Content-Type": "image/jpeg",
+      },
+      Expires: expiresIn, // URL expires in 5 minutes
+    });
+
+    logger.debug({ bucket, key, contentType }, 'Generating presigned URL for image upload');
+    return {
+      url,
+      fields: JSON.stringify(fields)
+    };
+  } catch (error) {
+    logger.fatal(
+      { bucket, key, contentType, error },
+      'Error generating a presigned URL for image upload'
+    );
+    throw error;
+  }
 }
