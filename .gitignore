@@ -1,5 +1,7 @@
+# Ignore packages generate using `npm pack`
+*.tgz
 
-#Ignore the test coverage directory (automatically generated during testing)
+# Ignore the test coverage directory (automatically generated during testing)
 coverage
 
 # Ignore the build directory (automatically generated during build)

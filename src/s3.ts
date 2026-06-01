@@ -209,7 +209,7 @@ export const getPresignedURLForImageUpload = async (
         ["content-length-range", 0, maxFileSize], // 2 MB max file size
       ],
       Fields: {
-        "Content-Type": "image/jpeg",
+        "Content-Type": contentType ?? "image/jpeg",
       },
       Expires: expiresIn, // URL expires in 5 minutes
     });
