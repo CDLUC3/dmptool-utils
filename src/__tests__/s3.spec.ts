@@ -157,10 +157,10 @@ describe('getPresignedURL', () => {
 });
 
 describe('getPresignedURLForImageUpload', () => {
-  it('raises errors', async () => {
+  it('returns undefined when S3 throws an error', async () => {
     mockCreatePresignedPost.mockImplementation(() => { throw new Error('Test Presigned Post error') });
 
-    await expect(getPresignedURLForImageUpload(mockLogger, 'TestBucket', '/images/photo.jpg', 'image/jpeg')).rejects.toThrow('Test Presigned Post error');
+    expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', '/images/photo.jpg', 'image/jpeg')).toEqual(undefined);
   });
 
   it('returns undefined if no logger is provided', async () => {

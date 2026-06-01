@@ -224,6 +224,6 @@ export const getPresignedURLForImageUpload = async (
       { bucket, key, contentType, error },
       'Error generating a presigned URL for image upload'
     );
-    throw error;
+    return undefined;
   }
 }
