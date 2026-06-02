@@ -1,7 +1,12 @@
 const mockSignedURLCommand = jest.fn();
+const mockCreatePresignedPost = jest.fn();
 
 jest.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: mockSignedURLCommand,
+}));
+
+jest.mock("@aws-sdk/s3-presigned-post", () => ({
+  createPresignedPost: mockCreatePresignedPost,
 }));
 
 import pino, { Logger } from 'pino';
@@ -13,6 +18,7 @@ import {
   listObjects,
   getObject,
   getPresignedURL,
+  getPresignedURLForImageUpload,
   putObject
 } from "../s3";
 import {
@@ -30,6 +36,7 @@ const s3Mock = mockClient(S3Client);
 
 beforeEach(() => {
   s3Mock.reset();
+  mockCreatePresignedPost.mockReset();
 })
 
 describe('listObjects', () => {
@@ -146,5 +153,69 @@ describe('getPresignedURL', () => {
     mockSignedURLCommand.mockResolvedValue(presignedURL);
 
     expect(await getPresignedURL(mockLogger, 'TestBucket', key)).toEqual(presignedURL);
+  });
+});
+
+describe('getPresignedURLForImageUpload', () => {
+  it('returns undefined when S3 throws an error', async () => {
+    mockCreatePresignedPost.mockImplementation(() => { throw new Error('Test Presigned Post error') });
+
+    expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', '/images/photo.jpg', 'image/jpeg')).toEqual(undefined);
+  });
+
+  it('returns undefined if no logger is provided', async () => {
+    expect(await getPresignedURLForImageUpload(null as any, 'TestBucket', '/images/photo.jpg', 'image/jpeg')).toEqual(undefined);
+  });
+
+  it('returns undefined if no bucket is specified', async () => {
+    expect(await getPresignedURLForImageUpload(mockLogger, '', '/images/photo.jpg', 'image/jpeg')).toEqual(undefined);
+  });
+
+  it('returns undefined if bucket is only whitespace', async () => {
+    expect(await getPresignedURLForImageUpload(mockLogger, '   ', '/images/photo.jpg', 'image/jpeg')).toEqual(undefined);
+  });
+
+  it('returns undefined if no key is specified', async () => {
+    expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', '', 'image/jpeg')).toEqual(undefined);
+  });
+
+  it('returns undefined if key is only whitespace', async () => {
+    expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', '   ', 'image/jpeg')).toEqual(undefined);
+  });
+
+  it('returns the presigned URL and fields for image upload', async () => {
+    const key = '/images/photo.jpg';
+    const presignedURL = 'http://testing.example.com/images/photo.jpg?X-Amz-Signature=abc123';
+    const fields = { 'Content-Type': 'image/jpeg', bucket: 'TestBucket' };
+    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields });
+
+    expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', key, 'image/jpeg')).toEqual({
+      url: presignedURL,
+      fields: JSON.stringify(fields),
+    });
+  });
+
+  it('uses a custom region when provided', async () => {
+    const key = '/images/photo.jpg';
+    const presignedURL = 'http://testing.example.com/images/photo.jpg?X-Amz-Signature=abc123';
+    const fields = { 'Content-Type': 'image/png' };
+    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields });
+
+    expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', key, 'image/png', 'eu-west-1')).toEqual({
+      url: presignedURL,
+      fields: JSON.stringify(fields),
+    });
+  });
+
+  it('uses the default region (us-west-2) when no region is provided', async () => {
+    const key = '/images/photo.jpg';
+    const presignedURL = 'http://testing.example.com/images/photo.jpg?X-Amz-Signature=def456';
+    const fields = { 'Content-Type': 'image/jpeg' };
+    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields });
+
+    expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', key, 'image/jpeg')).toEqual({
+      url: presignedURL,
+      fields: JSON.stringify(fields),
+    });
   });
 });
