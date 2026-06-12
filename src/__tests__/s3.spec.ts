@@ -19,9 +19,12 @@ import {
   getObject,
   getPresignedURL,
   getPresignedURLForImageUpload,
-  putObject
+  putObject,
+  removeObject
 } from "../s3";
 import {
+  DeleteObjectCommand,
+  DeleteObjectCommandOutput,
   GetObjectCommand,
   GetObjectCommandOutput,
   ListObjectsV2Command,
@@ -131,6 +134,33 @@ describe('putObject', () => {
   });
 });
 
+describe('removeObject', () => {
+  it('raises errors', async () => {
+    s3Mock.on(DeleteObjectCommand).rejects(new Error('Test S3 error'));
+
+    await expect(removeObject(mockLogger, 'TestBucket', '/files')).rejects.toThrow('Test S3 error');
+  });
+
+  it('it returns undefined if no bucket is specified', async () => {
+    expect(await removeObject(mockLogger, '', '/files')).toEqual(undefined);
+  });
+
+  it('it returns undefined if no key prefix is specified', async () => {
+    expect(await removeObject(mockLogger, 'Test', '  ')).toEqual(undefined);
+  });
+
+  it('it removes the object', async () => {
+    const items: DeleteObjectCommandOutput = {
+      $metadata: {
+        httpStatusCode: 204,
+      },
+    };
+    s3Mock.on(DeleteObjectCommand).resolves(items);
+
+    expect(await removeObject(mockLogger, 'TestBucket', '/files')).toEqual(items);
+  });
+});
+
 describe('getPresignedURL', () => {
   it('raises errors', async () => {
     s3Mock.on(GetObjectCommand).rejects(new Error('Test S3 error'));
@@ -219,3 +249,4 @@ describe('getPresignedURLForImageUpload', () => {
     });
   });
 });
+
