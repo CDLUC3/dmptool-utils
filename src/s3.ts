@@ -75,6 +75,7 @@ export const listObjects = async (
  * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to get the object from.
  * @param key The key of the object to get.
+ * @param endpoint When running locally, the S3 endpoint
  * @param region The region to generate the URL in. Defaults to 'us-west-2'.
  * @returns The object, or undefined if the bucket or key are invalid.
  */
@@ -82,11 +83,18 @@ export const getObject = async (
   logger: Logger,
   bucket: string,
   key: string,
+  endpoint?: string,
   region = 'us-west-2'
 ): Promise<GetObjectCommandOutput | undefined> => {
   if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
     try {
-      const s3Client = new S3Client({ region });
+      const s3Client = new S3Client({
+        region,
+        // When running locally we need to specify the endpoint and then tell S3
+        // to use path style instead of URLs
+        endpoint,
+        forcePathStyle: endpoint !== undefined
+      });
 
       const command = new GetObjectCommand({ Bucket: bucket, Key: key });
       logger.debug({ bucket, key }, 'Getting object from bucket');
@@ -108,6 +116,7 @@ export const getObject = async (
  * @param body The object to put.
  * @param contentType The content type of the object.
  * @param contentEncoding The content encoding of the object.
+ * @param endpoint When running locally, the S3 endpoint
  * @param region The region to generate the URL in. Defaults to 'us-west-2'.
  * @returns The response from the S3 putObject operation, or undefined if the
  * bucket or key are invalid.
@@ -119,11 +128,18 @@ export const putObject = async (
   body: any,
   contentType = 'application/json',
   contentEncoding = 'utf-8',
-  region = 'us-west-2'
+  region = 'us-west-2',
+  endpoint?: string
 ): Promise<PutObjectCommandOutput | undefined> => {
   if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
     try {
-      const s3Client = new S3Client({ region });
+      const s3Client = new S3Client({
+        region,
+        // When running locally we need to specify the endpoint and then tell S3
+        // to use path style instead of URLs
+        endpoint,
+        forcePathStyle: endpoint !== undefined
+      });
 
       const command = new PutObjectCommand({
         Bucket: bucket,
@@ -148,6 +164,7 @@ export const putObject = async (
  * @param logger The logger to use for logging.
  * @param bucket The name of the bucket to put the object into.
  * @param key The key of the object to put.
+ * @param endpoint When running locally, the S3 endpoint
  * @param region The AWS region
  * @returns The response from the S3 deleteObject operation, or undefined if the
  * bucket or key are invalid.
@@ -156,11 +173,18 @@ export const removeObject = async (
   logger: Logger,
   bucket: string,
   key: string,
+  endpoint?: string,
   region = 'us-west-2'
 ): Promise<DeleteObjectCommandOutput | undefined> => {
   if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
     try {
-      const s3Client = new S3Client({ region });
+      const s3Client = new S3Client({
+        region,
+        // When running locally we need to specify the endpoint and then tell S3
+        // to use path style instead of URLs
+        endpoint,
+        forcePathStyle: endpoint !== undefined,
+      });
 
       const command = new DeleteObjectCommand({
         Bucket: bucket,
