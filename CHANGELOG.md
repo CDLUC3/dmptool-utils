@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.3
+- Added a `removeObject` function to `s3.ts` for deleting objects from S3 buckets
+
 ## v2.1.2
 - Added `getPresignedURLForImageUpload` function to `s3.ts` for generating presigned POST URLs for image uploads
 - Installed `@aws-sdk/s3-presigned-post@3.1039.0` dependency

@@ -3,6 +3,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import {
   S3Client,
+  DeleteObjectCommand,
+  DeleteObjectCommandOutput,
   ListObjectsV2Command,
   GetObjectCommand,
   GetObjectCommandOutput,
@@ -138,6 +140,39 @@ export const putObject = async (
     }
   }
   return undefined;
+}
+
+/**
+ * Remove an object from the specified bucket
+ *
+ * @param logger The logger to use for logging.
+ * @param bucket The name of the bucket to put the object into.
+ * @param key The key of the object to put.
+ * @param region The AWS region
+ * @returns The response from the S3 deleteObject operation, or undefined if the
+ * bucket or key are invalid.
+ */
+export const removeObject = async (
+  logger: Logger,
+  bucket: string,
+  key: string,
+  region = 'us-west-2'
+): Promise<DeleteObjectCommandOutput | undefined> => {
+  if (logger && bucket && key && bucket.trim() !== '' && key.trim() !== '') {
+    try {
+      const s3Client = new S3Client({ region });
+
+      const command = new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      });
+      logger.debug({ bucket, key }, 'Remove object from bucket');
+      return await s3Client.send(command);
+    } catch (error) {
+      logger.fatal({ bucket, key, error }, 'Error removing object from bucket');
+      throw error;
+    }
+  }
 }
 
 /**
