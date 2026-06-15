@@ -362,6 +362,7 @@ export const getDMPs = async (
  * Fetch the specified DMP Extensions metadata record
  *
  * @param dynamoConnectionParams the DynamoDB connection parameters
+ * @param domainName the domain name to use when access URLs for narrative PDFs
  * @param dmpId the DMP ID (e.g. 'doi.org/11.12345/A1B2C3D4')
  * @param version The version of the DMP metadata record to persist
  * (e.g. '2026-11-01T13:08:19Z').

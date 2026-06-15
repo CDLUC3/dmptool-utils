@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,39 +32,39 @@
     "trivy-med": "./scripts/trivy-med.sh"
   },
   "dependencies": {
-    "@aws-sdk/s3-presigned-post": "^3.1057.0",
-    "@dmptool/types": "^3.1.4",
+    "@aws-sdk/s3-presigned-post": "^3.1068.0",
+    "@dmptool/types": "^3.1.6",
     "@elastic/ecs-pino-format": "^1.5.0",
-    "date-fns": "^4.1.0",
+    "date-fns": "^4.4.0",
     "jsonschema": "^1.5.0",
-    "mysql2": "^3.22.3",
+    "mysql2": "^3.22.5",
     "pino": "^10.3.1",
     "pino-lambda": "^4.4.1"
   },
   "peerDependencies": {
-    "@aws-sdk/client-cloudformation": "^3.1057.0",
-    "@aws-sdk/client-dynamodb": "^3.1057.0",
-    "@aws-sdk/client-s3": "^3.1057.0",
-    "@aws-sdk/client-sns": "^3.1057.0",
-    "@aws-sdk/client-sqs": "^3.1057.0",
-    "@aws-sdk/client-ssm": "^3.1057.0",
-    "@aws-sdk/s3-request-presigner": "^3.1057.0",
-    "@aws-sdk/util-dynamodb": "^3.996.2",
-    "@smithy/node-http-handler": "^4.7.5"
+    "@aws-sdk/client-cloudformation": "^3.1068.0",
+    "@aws-sdk/client-dynamodb": "^3.1068.0",
+    "@aws-sdk/client-s3": "^3.1068.0",
+    "@aws-sdk/client-sns": "^3.1068.0",
+    "@aws-sdk/client-sqs": "^3.1068.0",
+    "@aws-sdk/client-ssm": "^3.1068.0",
+    "@aws-sdk/s3-request-presigner": "^3.1068.0",
+    "@aws-sdk/util-dynamodb": "^3.996.4",
+    "@smithy/node-http-handler": "^4.7.8"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@smithy/util-stream": "^4.6.1",
+    "@smithy/util-stream": "^4.6.7",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.3",
     "aws-sdk-client-mock": "^4.1.0",
-    "eslint": "^10.2.1",
+    "eslint": "^10.5.0",
     "husky": "^9.1.7",
-    "jest": "^30.3.0",
-    "ts-jest": "^29.4.9",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.59.1"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0"
   },
   "allowScripts": {
     "@dmptool/types@3.1.4": true

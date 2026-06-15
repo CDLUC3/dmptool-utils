@@ -225,7 +225,7 @@ export const getPresignedURL = async (
         ? new PutObjectCommand(params)
         : new GetObjectCommand(params);
       logger.debug({ ...params, usePutMethod }, 'Generating presigned URL');
-      return await getSignedUrl(s3Client, command, { expiresIn: 900 });;
+      return await getSignedUrl(s3Client, command, { expiresIn: 900 });
     } catch (error) {
       logger.fatal({ ...params, usePutMethod, error }, 'Error generating a presigned URL');
       throw error;
