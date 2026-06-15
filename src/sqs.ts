@@ -19,7 +19,7 @@ export interface SendMessageResponse {
  * @param queueURL The endpoint of the SQS queue to send the message to.
  * @param source The name of the caller (e.g. the Lambda Function or Application Function)
  * @param detailType The type of message
- * @param detail The payload of the message (will be accessible to the invoked resource)
+ * @param details The payload of the message (will be accessible to the invoked resource)
  * @param region The region to publish the message in. Defaults to 'us-west-2'.
  * @param useTLS Whether to use TLS when sending the message. Defaults to true.
  * Should be false when running in a local development environment.

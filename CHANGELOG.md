@@ -1,5 +1,9 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.4
+- Updated dependencies
+- Switched to Typescript 6 and NodeNext module resolution
+
 ## v2.1.3
 - Added a `removeObject` function to `s3.ts` for deleting objects from S3 buckets
 

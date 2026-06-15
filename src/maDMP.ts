@@ -65,6 +65,7 @@ class DMPValidationError extends Error {
 /**
  * Ensure that the ORCID is in the correct format (https://orcid.org/0000-0000-0000-0000)
  *
+ * @param env the current environment
  * @param orcidIn the ORCID to check
  * @returns the ORCID in the correct format or null if it is not in the correct format
  */
@@ -384,7 +385,7 @@ const defaultDataset = (
  * from the MySQL database this information is extracted from the Answers table
  * for Research Output Questions
  *
- * @param rdssConnectionParams the connection parameters for the MySQL database
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param applicationName the name of the application/service
  * @param projectId the Project ID to fetch the Dataset information for
  * @param planId the Plan ID to fetch the Dataset information for
@@ -755,7 +756,7 @@ function renumberOrders(sections: DMPExtensionNarrativeSection[]): void {
 /**
  * Builds the DMP Tool Narrative extension for the DMP
  *
- * @param rdssConnectionParams the connection parameters for the MySQL database
+ * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param planId the Plan ID to fetch the narrative information for
  * @returns the DMP Tool Narrative extension for the DMP
  */
@@ -811,7 +812,8 @@ const loadNarrativeTemplateInfo = async (
 /**
  * Builds the RDA Common Standard Contact entry for the DMP
  *
- * @param rdssConnectionParams the connection parameters for the MySQL database
+ * @param rdsConnectionParams the connection parameters for the MySQL database
+ * @param env the current environment
  * @param plan the Plan information retrieve from the MySQL database
  * @param members the PlanMembers information retrieve from the MySQL database
  * @returns the RDA Common Standard Contact entry for the DMP
@@ -870,6 +872,7 @@ const buildContact = async (
  * Builds the RDA Common Standard Contributor array for the DMP from the PlanMembers
  *
  * @param applicationName the name of the application/service
+ * @param env the current environment
  * @param planId the Plan ID
  * @param projectId the Project ID
  * @param members the PlanMembers information retrieve from the MySQL database
@@ -1340,6 +1343,7 @@ export const validateRDACommonStandard = (
  * and DMP Tool extensions schema
  *
  * @param logger the logger to use for logging
+ * @param dmpId the id of the DMP
  * @param dmp The DMP metadata record to validate
  * @returns the DMP metadata record if it is valid
  * @throws DMPValidationError if the record is invalid with the error message(s)
