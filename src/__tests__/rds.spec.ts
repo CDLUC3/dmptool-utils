@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { queryTable } from '../rds';
 import * as mysql from 'mysql2/promise';
 import pino, { Logger } from 'pino';
@@ -27,7 +26,7 @@ describe('queryTable', () => {
       query: mockQuery,
       end: mockEnd,
     };
-    (mysql.createConnection as jest.Mock).mockResolvedValue(mockConnection as never);
+    (mysql.createConnection as jest.Mock).mockResolvedValue(mockConnection);
   });
 
   afterEach(() => {
@@ -37,7 +36,7 @@ describe('queryTable', () => {
   it('should execute a query and return results', async () => {
     const mockResults = [{id: 1, name: 'test'}];
     const mockFields = [{name: 'id'}, {name: 'name'}];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     const result = await queryTable(mockConfig, 'SELECT * FROM users');
 
@@ -49,7 +48,7 @@ describe('queryTable', () => {
   it('should execute a query with positional parameters', async () => {
     const mockResults = [{id: 1, name: 'test'}];
     const mockFields = [{name: 'id'}, {name: 'name'}];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     const result = await queryTable(mockConfig, 'SELECT * FROM users WHERE id = ?', [1]);
 
@@ -61,7 +60,7 @@ describe('queryTable', () => {
   it('should execute a query with named parameters', async () => {
     const mockResults = [{id: 1, name: 'test'}];
     const mockFields = [{name: 'id'}, {name: 'name'}];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     const result = await queryTable(mockConfig, 'SELECT * FROM users WHERE id = :id', { id: 1 });
 
@@ -73,7 +72,7 @@ describe('queryTable', () => {
   it('should handle null and undefined parameters', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     await queryTable(mockConfig, 'INSERT INTO users VALUES (?, ?)', [null, undefined]);
 
@@ -84,7 +83,7 @@ describe('queryTable', () => {
   it('should prepare number values correctly', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [123]);
 
@@ -94,7 +93,7 @@ describe('queryTable', () => {
   it('should prepare boolean values correctly', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [true]);
 
@@ -104,7 +103,7 @@ describe('queryTable', () => {
   it('should prepare array values correctly', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [[1, 2, 3]]);
 
@@ -114,20 +113,20 @@ describe('queryTable', () => {
   it('should prepare date values correctly', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     const testDate = new Date('2023-01-01T12:00:00Z');
     await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', [testDate]);
 
     expect(mockQuery).toHaveBeenCalled();
-    const calledArgs = mockQuery.mock.calls[0][1] as never;
+    const calledArgs = mockQuery.mock.calls[0][1];
     expect(typeof calledArgs[0]).toBe('string');
   });
 
   it('should prepare string values correctly', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     await queryTable(mockConfig, 'INSERT INTO users VALUES (?)', ['test string']);
 
@@ -137,7 +136,7 @@ describe('queryTable', () => {
   it('should sanitize SQL query by removing tabs and newlines', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     await queryTable(mockConfig, 'SELECT  *\n\tFROM\tusers\n\tWHERE  id = ?', [1]);
 
@@ -148,7 +147,7 @@ describe('queryTable', () => {
   it('should close connection after query execution', async () => {
     const mockResults: any[] = [];
     const mockFields: any[] = [];
-    mockQuery.mockResolvedValue([mockResults, mockFields] as never);
+    mockQuery.mockResolvedValue([mockResults, mockFields]);
 
     await queryTable(mockConfig, 'SELECT * FROM users');
 

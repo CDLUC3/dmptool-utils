@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
+    "types": ["jest"]
   },
   "include": ["src"],
   "exclude": ["src/__tests__/**", "dist"]

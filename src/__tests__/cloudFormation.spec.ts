@@ -1,4 +1,3 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 const mockCFCommand = jest.fn();
 
 jest.mock('@aws-sdk/client-cloudformation', () => ({
@@ -19,13 +18,13 @@ beforeEach(() => {
 
 describe('getExport', () => {
   it('raises a CloudFormation error', async () => {
-    mockCFCommand.mockResolvedValue({ Exports: []} as never);
+    mockCFCommand.mockResolvedValue({ Exports: []});
     mockCFCommand.mockImplementation(() => { throw new Error('Test CloudFormation error') });
     await expect(getExport(mockLogger,'BadTest')).rejects.toThrow('Test CloudFormation error');
   });
 
   it('it loads all of the available exports once', async () => {
-    mockCFCommand.mockResolvedValue({ Exports: [{ Name: 'Test', Value: 'Passed' }]} as never);
+    mockCFCommand.mockResolvedValue({ Exports: [{ Name: 'Test', Value: 'Passed' }]});
 
     await getExport(mockLogger, 'Test');
     await getExport(mockLogger, 'test');
@@ -33,14 +32,14 @@ describe('getExport', () => {
   });
 
   it('returns the value for the export', async () => {
-    mockCFCommand.mockResolvedValue({ Exports: [{ Name: 'Test', Value: 'Passed' }]} as never);
+    mockCFCommand.mockResolvedValue({ Exports: [{ Name: 'Test', Value: 'Passed' }]});
 
     const response = await getExport(mockLogger, 'Test');
     expect(response).toEqual('Passed');
   });
 
   it('returns undefined if the export is missing', async () => {
-    mockCFCommand.mockResolvedValue({ Exports: [{ Name: 'Test', Value: 'Passed' }]} as never);
+    mockCFCommand.mockResolvedValue({ Exports: [{ Name: 'Test', Value: 'Passed' }]});
 
     const response = await getExport(mockLogger, 'BadTest');
     expect(response).toEqual(undefined);
