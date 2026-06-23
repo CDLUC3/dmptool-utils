@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 const mockSignedURLCommand = jest.fn();
 const mockCreatePresignedPost = jest.fn();
 
@@ -180,7 +181,7 @@ describe('getPresignedURL', () => {
   it('it returns the presigned URL', async () => {
     const key = '/tests/file.json';
     const presignedURL = 'http://testing.example.com/file/12345abcdefg';
-    mockSignedURLCommand.mockResolvedValue(presignedURL);
+    mockSignedURLCommand.mockResolvedValue(presignedURL as never);
 
     expect(await getPresignedURL(mockLogger, 'TestBucket', key)).toEqual(presignedURL);
   });
@@ -217,7 +218,7 @@ describe('getPresignedURLForImageUpload', () => {
     const key = '/images/photo.jpg';
     const presignedURL = 'http://testing.example.com/images/photo.jpg?X-Amz-Signature=abc123';
     const fields = { 'Content-Type': 'image/jpeg', bucket: 'TestBucket' };
-    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields });
+    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields } as never);
 
     expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', key, 'image/jpeg')).toEqual({
       url: presignedURL,
@@ -229,7 +230,7 @@ describe('getPresignedURLForImageUpload', () => {
     const key = '/images/photo.jpg';
     const presignedURL = 'http://testing.example.com/images/photo.jpg?X-Amz-Signature=abc123';
     const fields = { 'Content-Type': 'image/png' };
-    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields });
+    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields } as never);
 
     expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', key, 'image/png', 'eu-west-1')).toEqual({
       url: presignedURL,
@@ -241,7 +242,7 @@ describe('getPresignedURLForImageUpload', () => {
     const key = '/images/photo.jpg';
     const presignedURL = 'http://testing.example.com/images/photo.jpg?X-Amz-Signature=def456';
     const fields = { 'Content-Type': 'image/jpeg' };
-    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields });
+    mockCreatePresignedPost.mockResolvedValue({ url: presignedURL, fields } as never);
 
     expect(await getPresignedURLForImageUpload(mockLogger, 'TestBucket', key, 'image/jpeg')).toEqual({
       url: presignedURL,

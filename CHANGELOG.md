@@ -1,5 +1,9 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.5
+- Added `alternate_identifier` array to the maDMP generator
+- Updated all Jest tests to include Jest global imports and added type `never` for mock resolved values
+
 ## v2.1.4
 - Updated dependencies
 - Switched to Typescript 6 and NodeNext module resolution

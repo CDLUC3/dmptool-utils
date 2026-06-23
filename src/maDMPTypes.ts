@@ -105,6 +105,11 @@ export interface RDACommonStandardAffiliation {
   }
 }
 
+export interface RDACommonStandardAlternateIdentifier {
+  identifier: string;
+  type: string;
+}
+
 export interface RDACommonStandardContact {
   name: string;
   mbox: string;
