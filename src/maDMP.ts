@@ -46,7 +46,7 @@ import {
   RDACommonStandardDataset, RDACommonStandardIdentifierType,
   RDACommonStandardProject,
   RDACommonStandardRelatedWork,
-  StandardIdentifierType,
+  StandardIdentifierType, RDACommonStandardAlternateIdentifier,
 } from "./maDMPTypes";
 
 const ROR_REGEX = /^https?:\/\/ror\.org\/[0-9a-zA-Z]+$/;
@@ -433,6 +433,37 @@ const loadDatasetInfo = async (
   }
 
   return datasets;
+}
+
+/**
+ * Builds the RDA Common Standard Alternate Identifier entries for the DMP
+ *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
+ * @param planId the Plan ID to fetch the Related Works information for
+ * @returns the RDA Common Standard Related Identifier entries for the DMP
+ */
+const loadAlternateIdentifiersInfo = async (
+  rdsConnectionParams: ConnectionParams,
+  planId: number
+): Promise<RDACommonStandardAlternateIdentifier[] | []> => {
+  const sql = `SELECT alternateIdentifier FROM alternateIdentifiers WHERE planId = ?;`;
+  rdsConnectionParams.logger.debug({ planId, sql }, 'Fetching alternate identifier information');
+  const resp = await queryTable(
+    rdsConnectionParams,
+    sql,
+    [planId.toString()]
+  );
+  if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
+    const alts = resp.results.filter((row) => !isNullOrUndefined(row));
+    // Determine the identifier types
+    return alts.map((alt: string) => {
+      return {
+        identifier: alt,
+        type: determineIdentifierType(alt),
+      };
+    });
+  }
+  return [];
 }
 
 /**
@@ -1493,6 +1524,10 @@ export async function planToDMPCommonStandard(
     plan.id
   );
   const funding: LoadFundingInfo | undefined = fundings.length > 0 ? fundings[0] : undefined;
+  const alts: RDACommonStandardAlternateIdentifier[] | [] = await loadAlternateIdentifiersInfo(
+    rdsConnectionParams,
+    plan.id
+  );
   const works: RDACommonStandardRelatedWork[] | [] = await loadRelatedWorksInfo(
     rdsConnectionParams,
     plan.id
@@ -1557,7 +1592,7 @@ export async function planToDMPCommonStandard(
     defaultRole ?? 'other'
   );
 
-  // Add the contributor, project and related identifier properties if they have values
+  // Add the contributor, project and alternate/related identifier properties if they have values
   if (!isNullOrUndefined(dmpProject)) {
     dmp.dmp.project = [removeNullAndUndefinedFromObject(dmpProject)];
   }
@@ -1566,6 +1601,9 @@ export async function planToDMPCommonStandard(
     && dmpContributor.length > 0) {
 
     dmp.dmp.contributor = removeNullAndUndefinedFromObject(dmpContributor);
+  }
+  if (!isNullOrUndefined(alts) && Array.isArray(alts) && alts.length > 0) {
+    dmp.dmp.alternate_identifier = removeNullAndUndefinedFromObject(alts);
   }
   if (!isNullOrUndefined(works) && Array.isArray(works) && works.length > 0) {
     dmp.dmp.related_identifier = removeNullAndUndefinedFromObject(works);

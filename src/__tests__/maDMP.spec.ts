@@ -1,6 +1,3 @@
-
-
-
 import { planToDMPCommonStandard } from '../maDMP';
 import {
   DMPToolDMPType,
@@ -155,6 +152,11 @@ describe('planToDMPCommonStandard', () => {
     funderProjectNumber: 'PRJ-EU-3575674574567556',
     funderOpportunityNumber: 'DEPTA-GJ3245TH-564T'
   }
+
+  const mockAlternateIdentifiers: string[] = [
+    'https://example.org/alts/123',
+    '986806w8tgf834gf@example.com'
+  ]
 
   const mockRelatedWorks: LoadRelatedWorkInfo[] = [
     { identifier: 'https://example.org/works/29485674952', workType: 'dataset' },
@@ -536,6 +538,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({ results: [mockPlanOwner] })  // Will use the plan owner
         .mockResolvedValueOnce({ results: [] })  // No Research Outputs
         .mockResolvedValueOnce({ results: [] })  // No Funding Info
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({ results: [] })  // No Related Works Info
         .mockResolvedValueOnce({ results: [defaultMemberRole] });
 
@@ -610,6 +613,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -637,6 +641,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({ results: [mockPlanOwner] })  // Will use the plan owner
         .mockResolvedValueOnce({ results: []})  // No Research Outputs
         .mockResolvedValueOnce({ results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: [] }) // No Alternate Identifier Info
         .mockResolvedValueOnce({ results: []})  // No Related Works Info
         .mockResolvedValueOnce({ results: [defaultMemberRole] })
         .mockResolvedValueOnce({ results: mockNarrativeResults });
@@ -680,6 +685,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: mockMembersWithPrimaryContact})
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -734,6 +740,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: [mockMinimalPlanFunding]})
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -762,6 +769,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: [mockCompletePlanFunding]})
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -823,6 +831,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -853,6 +862,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: mockMembersWithPrimaryContact})
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -887,6 +897,36 @@ describe('planToDMPCommonStandard', () => {
       expect(contributor?.affiliation[0].affiliation_id.type).toEqual('ror');
     });
 
+    it('includes alternate identifiers in the DMP when present', async () => {
+      // Mock all the calls to the RDS MySQL tables
+      (queryTable as jest.Mock)
+        .mockResolvedValueOnce({results: [mockUnregisteredPlanInfo]})
+        .mockResolvedValueOnce({results: [mockProjectMinimumInfo]})
+        .mockResolvedValueOnce({results: []})  // No Plan members
+        .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
+        .mockResolvedValueOnce({results: []})  // No Research Outputs
+        .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: mockAlternateIdentifiers })
+        .mockResolvedValueOnce({results: []}) // No related works
+        .mockResolvedValueOnce({results: [defaultMemberRole]});
+
+      const result = await planToDMPCommonStandard(
+        mockConfig,
+        mockApplication,
+        mockDomain,
+        mockEnv,
+        123
+      );
+
+      expect(result).toBeDefined();
+      expect(result?.dmp?.alternate_identifier).toBeDefined();
+      expect(result?.dmp?.alternate_identifier).toHaveLength(2);
+      expect(result?.dmp?.alternate_identifier[0].identifier).toEqual(mockAlternateIdentifiers[0]);
+      expect(result?.dmp?.related_identifier[0].type).toEqual('url');
+      expect(result?.dmp?.alternate_identifier[1].identifier).toEqual(mockAlternateIdentifiers[1]);
+      expect(result?.dmp?.related_identifier[1].type).toEqual('other');
+    });
+
     it('includes related works in the DMP when present', async () => {
       // Mock all the calls to the RDS MySQL tables
       (queryTable as jest.Mock)
@@ -896,6 +936,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: mockRelatedWorks})
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -929,6 +970,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: [mockMinimalResearchOutputs]})
         .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({ results: [] })  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
