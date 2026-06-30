@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,9 +31,13 @@
     "trivy-high": "./scripts/trivy-high.sh",
     "trivy-med": "./scripts/trivy-med.sh"
   },
+  "overrides": {
+    "@babel/core": "8.0.1",
+    "js-yaml": "5.2.0"
+  },
   "dependencies": {
-    "@aws-sdk/s3-presigned-post": "^3.1068.0",
-    "@dmptool/types": "^3.1.6",
+    "@aws-sdk/s3-presigned-post": "^3.1076.0",
+    "@dmptool/types": "file:./dmptool-types-4.0.0.tgz",
     "@elastic/ecs-pino-format": "^1.5.0",
     "date-fns": "^4.4.0",
     "jsonschema": "^1.5.0",
@@ -42,29 +46,29 @@
     "pino-lambda": "^4.4.1"
   },
   "peerDependencies": {
-    "@aws-sdk/client-cloudformation": "^3.1068.0",
-    "@aws-sdk/client-dynamodb": "^3.1068.0",
-    "@aws-sdk/client-s3": "^3.1068.0",
-    "@aws-sdk/client-sns": "^3.1068.0",
-    "@aws-sdk/client-sqs": "^3.1068.0",
-    "@aws-sdk/client-ssm": "^3.1068.0",
-    "@aws-sdk/s3-request-presigner": "^3.1068.0",
-    "@aws-sdk/util-dynamodb": "^3.996.4",
-    "@smithy/node-http-handler": "^4.7.8"
+    "@aws-sdk/client-cloudformation": "^3.1076.0",
+    "@aws-sdk/client-dynamodb": "^3.1076.0",
+    "@aws-sdk/client-s3": "^3.1076.0",
+    "@aws-sdk/client-sns": "^3.1076.0",
+    "@aws-sdk/client-sqs": "^3.1076.0",
+    "@aws-sdk/client-ssm": "^3.1076.0",
+    "@aws-sdk/s3-request-presigner": "^3.1076.0",
+    "@aws-sdk/util-dynamodb": "^3.996.5",
+    "@smithy/node-http-handler": "^4.9.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@smithy/util-stream": "^4.6.7",
+    "@smithy/util-stream": "^4.7.4",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.0.1",
     "aws-sdk-client-mock": "^4.1.0",
-    "eslint": "^10.5.0",
+    "eslint": "^10.6.0",
     "husky": "^9.1.7",
     "jest": "^30.4.2",
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.0"
+    "typescript-eslint": "^8.62.1"
   },
   "allowScripts": {
     "@dmptool/types@3.1.4": true
