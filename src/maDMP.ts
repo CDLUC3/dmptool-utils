@@ -43,10 +43,12 @@ import {
   RDACommonStandardAffiliation,
   RDACommonStandardContact,
   RDACommonStandardContributor,
-  RDACommonStandardDataset, RDACommonStandardIdentifierType,
+  RDACommonStandardDataset,
+  RDACommonStandardIdentifierType,
   RDACommonStandardProject,
   RDACommonStandardRelatedWork,
-  StandardIdentifierType, RDACommonStandardAlternateIdentifier,
+  StandardIdentifierType,
+  RDACommonStandardAlternateIdentifier,
 } from "./maDMPTypes";
 
 const ROR_REGEX = /^https?:\/\/ror\.org\/[0-9a-zA-Z]+$/;
@@ -413,7 +415,7 @@ const loadDatasetInfo = async (
     sql,
     [planId.toString()]
   );
-  // There would typically only be one research outputs question per plan but
+  // There would typically only be one research outputs question per plan, but
   // we need to allow for multiples just in case.
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     for (const result of resp.results) {

@@ -1,5 +1,9 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.6
+- Update `@dmptool/types` dependency to `v4.0.0` to support the new RDA Common Standard fields in the DMP Tool extensions schema
+- Updated other dependencies and added overrides for `@babel/core` and `js-yaml`
+
 ## v2.1.5
 - Added `alternate_identifier` array to the maDMP generator
 - Updated all Jest tests to include Jest global imports and added type `never` for mock resolved values

@@ -10,5 +10,8 @@ dist
 # Ignore the dependency directory
 node_modules
 
+# Ignore the npm pack artifacts
+dmptool-utils-*.tgz
+
 # Ignore WebStorm IDE file
 .idea
