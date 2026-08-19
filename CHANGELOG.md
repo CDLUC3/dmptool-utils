@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.7
+- Fixed bug with loading a plan's alternate identifiers
+
 ## v2.1.6
 - Update `@dmptool/types` dependency to `v4.0.0` to support the new RDA Common Standard fields in the DMP Tool extensions schema
 - Updated other dependencies and added overrides for `@babel/core` and `js-yaml`
