@@ -458,10 +458,11 @@ const loadAlternateIdentifiersInfo = async (
   if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
     const alts = resp.results.filter((row) => !isNullOrUndefined(row));
     // Determine the identifier types
-    return alts.map((alt: string) => {
+    return alts.map((alt: { alternateIdentifier: string }) => {
+      const id: string = alt.alternateIdentifier;
       return {
-        identifier: alt,
-        type: determineIdentifierType(alt),
+        identifier: id,
+        type: determineIdentifierType(id),
       };
     });
   }
@@ -1604,6 +1605,7 @@ export async function planToDMPCommonStandard(
 
     dmp.dmp.contributor = removeNullAndUndefinedFromObject(dmpContributor);
   }
+
   if (!isNullOrUndefined(alts) && Array.isArray(alts) && alts.length > 0) {
     dmp.dmp.alternate_identifier = removeNullAndUndefinedFromObject(alts);
   }
