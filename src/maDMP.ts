@@ -99,7 +99,7 @@ function formatORCID(env: EnvironmentEnum, orcidIn: string): string | null {
  * @returns the RDA Common Standard identifier type for the given URI string
  */
 function determineIdentifierType(uri: string): string {
-  if (typeof uri !== 'string') {
+  if (isNullOrUndefined(uri)) {
     return 'other';
   }
   if (uri.match(ORCID_REGEX)) {
