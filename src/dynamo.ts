@@ -663,6 +663,17 @@ export const updateDMP = async (
       || (now - lastModified) > gracePeriod
       || modifiedTimestampChanged;
 
+      console.log("***updateDMP versioning check***", {
+  dmpId,
+  previousModified: latest.dmp?.modified,
+  newModified: innerMetadata.modified,
+  modifiedTimestampChanged,
+  provenanceChanged: dmptoolExtension.provenance !== latest.dmp.provenance,
+  gracePeriodElapsed: (now - lastModified) > gracePeriod,
+  needToVersion
+});
+
+
     dynamoConnectionParams.logger.debug(
       { dmpId, lastModified, now, gracePeriod, needToVersion },
       'Determining if we need to version the DMP'
