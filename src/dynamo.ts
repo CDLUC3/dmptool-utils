@@ -689,6 +689,12 @@ export const updateDMP = async (
         latest.dmp,
         latest.dmp.modified
       );
+
+        console.log("***Snapshot creation completed***", {
+    dmpId,
+    snapshotModified: latest.dmp.modified
+  });
+
     }
 
     // Updates can only ever occur on the latest version of the DMP (the Plan logic
