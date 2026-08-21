@@ -441,8 +441,8 @@ const loadDatasetInfo = async (
  * Builds the RDA Common Standard Alternate Identifier entries for the DMP
  *
  * @param rdsConnectionParams the connection parameters for the MySQL database
- * @param planId the Plan ID to fetch the Related Works information for
- * @returns the RDA Common Standard Related Identifier entries for the DMP
+ * @param planId the Plan ID to fetch the Alternate Identifier information for
+ * @returns the RDA Common Standard Alternate Identifier entries for the DMP
  */
 const loadAlternateIdentifiersInfo = async (
   rdsConnectionParams: ConnectionParams,
@@ -481,7 +481,7 @@ const loadRelatedWorksInfo = async (
   planId: number
 ): Promise<RDACommonStandardRelatedWork[] | []> => {
   const sql = `
-    SELECT w.doi AS identifier, LOWER(wv.workType) AS workType
+    SELECT w.doi AS identifier, LOWER(wv.workType) AS workType, LOWER(rw.relationType) AS relationType
     FROM relatedWorks rw
       JOIN workVersions wv ON rw.workVersionId = wv.id
         JOIN works w ON wv.workId = w.id
@@ -499,10 +499,10 @@ const loadRelatedWorksInfo = async (
     // Determine the identifier types
     return works.map((work: LoadRelatedWorkInfo) => {
       return {
-        relation_type: 'cites',
+        relation_type: work.relationType ?? 'cites',
         identifier: work.identifier,
         type: determineIdentifierType(work.identifier),
-        resource_type: work.workType?.toLowerCase(),
+        resource_type: work.workType ?? 'dataset',
       };
     });
   }

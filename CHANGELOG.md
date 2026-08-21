@@ -1,5 +1,11 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.8
+- Added `relationType` field to the Related works query in the maDMP generator
+- Upgraded `@dmptool/types` to 4.0.1
+- Removed old overrides for `@babel/core` and `js-yaml` since they are no longer needed
+- Added override for `brace-expansion` to address security vulnerability
+
 ## v2.1.7
 - Fixed bug with loading a plan's alternate identifiers
 
