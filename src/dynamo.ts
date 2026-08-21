@@ -652,22 +652,17 @@ export const updateDMP = async (
     const now = Date.now();
     const gracePeriod = gracePeriodInMS ? Number(gracePeriodInMS) : 7200000;
 
-    // Check if the modified timestamp has changed
-    const modifiedTimestampChanged = latest.dmp?.modified !== innerMetadata.modified;
-
     // We need to version the DMP if:
     // - The provenance doesn't match, OR
     // - The modified timestamp is older than the grace period, OR
     // - The modified timestamp has changed (create snapshot of old version)
-    const needToVersion: boolean = dmptoolExtension.provenance !== latest.dmp.provenance
-      || (now - lastModified) > gracePeriod
-      || modifiedTimestampChanged;
+const needToVersion: boolean = dmptoolExtension.provenance !== latest.dmp.provenance
+  || (now - lastModified) > gracePeriod;
 
       console.log("***updateDMP versioning check***", {
   dmpId,
   previousModified: latest.dmp?.modified,
   newModified: innerMetadata.modified,
-  modifiedTimestampChanged,
   provenanceChanged: dmptoolExtension.provenance !== latest.dmp.provenance,
   gracePeriodElapsed: (now - lastModified) > gracePeriod,
   needToVersion
