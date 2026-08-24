@@ -6,6 +6,7 @@ import {
   isJSON,
   isValidDate,
   normaliseHttpProtocol,
+  ensureHttpsProtocol,
   randomHex,
   removeNullAndUndefinedFromObject,
 } from '../general';
@@ -141,6 +142,11 @@ describe('normaliseHttpProtocol', () => {
     expect(result).toBe('example.com');
   });
 
+  it('handles URLs without protocol', () => {
+    const result = ensureHttpsProtocol('example.com');
+    expect(result).toBe('https://example.com');
+  });
+
   it('converts http:// at the beginning only', () => {
     const result = normaliseHttpProtocol('http://example.com/http://test');
     expect(result).toBe('https://example.com/http://test');
@@ -225,7 +231,7 @@ describe('areEqual', () => {
   it('returns true when two identical objects are compared', () => {
     const obj = { name: 'test', value: 123 };
     expect(areEqual(obj, obj)).toBe(true);
-    expect(areEqual({ name: 'test'}, {name: 'test' })).toBe(true);
+    expect(areEqual({ name: 'test' }, { name: 'test' })).toBe(true);
   });
 
   it('returns false when two different objects are compared', () => {
@@ -286,7 +292,7 @@ describe('isNullOrUndefined', () => {
 
   it('returns false when value is an object', () => {
     expect(isNullOrUndefined({})).toBe(false);
-    expect(isNullOrUndefined({name: 'test'})).toBe(false);
+    expect(isNullOrUndefined({ name: 'test' })).toBe(false);
   });
 
   it('returns false when value is an array', () => {

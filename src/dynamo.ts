@@ -21,7 +21,7 @@ import {
 import {
   convertMySQLDateTimeToRFC3339,
   isNullOrUndefined,
-  normaliseHttpProtocol,
+  ensureHttpsProtocol,
   toErrorMessage
 } from "./general";
 
@@ -433,7 +433,7 @@ const getDMPExtensions = async (
               ? ''
               : `?version=${v.modified}`;
             const dmpIdWithoutProtocol = dmpId.replace(/^https?:\/\//, '');
-            const accessURLBase = `${normaliseHttpProtocol(domainName)}/dmps/`
+            const accessURLBase = `${ensureHttpsProtocol(domainName)}/dmps/`
             return {
               access_url: `${accessURLBase}${dmpIdWithoutProtocol}${queryParam}`,
               version: v.modified,

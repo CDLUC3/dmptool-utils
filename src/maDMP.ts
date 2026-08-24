@@ -7,6 +7,7 @@ import {
   isNullOrUndefined,
   isValidDate,
   normaliseHttpProtocol,
+  ensureHttpsProtocol,
   removeNullAndUndefinedFromObject,
 } from "./general";
 import {
@@ -1083,7 +1084,7 @@ const buildDMPToolExtensions = async (
     const id = plan.dmpId.replace('https://doi.org/', '');
 
     extensions.narrative = {
-      download_url: `${normaliseHttpProtocol(domainName)}/dmps/${id}/narrative`,
+      download_url: `${ensureHttpsProtocol(domainName)}/dmps/${id}/narrative`,
       template: narrative
     };
   }

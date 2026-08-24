@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.8
+- Fixed double protocol issues `download_url` and `access_url` by using `ensureHttpsProtocol` with them.
+
 ## v2.1.7
 - Fixed bug with loading a plan's alternate identifiers
 
