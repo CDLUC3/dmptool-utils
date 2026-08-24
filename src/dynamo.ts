@@ -126,7 +126,7 @@ export const DMPExists = async (
     ProjectExpression: "PK"
   }
 
-  dynamoConnectionParams.logger.debug({ ...params, dmpId}, 'Checking if DMP exists in DynamoDB')
+  dynamoConnectionParams.logger.debug({ ...params, dmpId }, 'Checking if DMP exists in DynamoDB')
   try {
     const response = await queryTable(dynamoConnectionParams, params);
     return !isNullOrUndefined(response)
@@ -135,7 +135,7 @@ export const DMPExists = async (
 
   } catch (err) {
     const errMsg: string = toErrorMessage(err);
-    dynamoConnectionParams.logger.fatal({ ...params, dmpId, errMsg}, 'Failed to check for DMP existence' )
+    dynamoConnectionParams.logger.fatal({ ...params, dmpId, errMsg }, 'Failed to check for DMP existence')
     throw new DMPToolDynamoError(
       `Unable to check if DMP exists id: ${dmpId} - ${errMsg}`
     );
@@ -186,7 +186,7 @@ export const getAllUniqueDMPIds = async (
 
   } catch (err) {
     const errMsg: string = toErrorMessage(err);
-    dynamoConnectionParams.logger.fatal({ ...params, errMsg }, 'Failed to fetch all unique DMPs' )
+    dynamoConnectionParams.logger.fatal({ ...params, errMsg }, 'Failed to fetch all unique DMPs')
     throw new DMPToolDynamoError(
       `Unable to fetch all unique DMPs: ${errMsg}`
     );
@@ -241,7 +241,7 @@ export const getDMPVersions = async (
     return [];
   } catch (err) {
     const errMsg: string = toErrorMessage(err);
-    dynamoConnectionParams.logger.fatal({ ...params, dmpId, errMsg }, 'Failed to fetch DMP versions' )
+    dynamoConnectionParams.logger.fatal({ ...params, dmpId, errMsg }, 'Failed to fetch DMP versions')
     throw new DMPToolDynamoError(
       `Unable to fetch DMP versions id: ${dmpId} - ${errMsg}`
     );
@@ -306,7 +306,7 @@ export const getDMPs = async (
       const unmarshalled: DynamoVersionType[] = response.Items.map(item => unmarshall(item));
 
       // sort the results by the SK (version) descending
-      const items: DynamoVersionType[] = unmarshalled.sort((a:DynamoVersionType, b: DynamoVersionType) => {
+      const items: DynamoVersionType[] = unmarshalled.sort((a: DynamoVersionType, b: DynamoVersionType) => {
         return (b.SK).toString().localeCompare((a.SK).toString());
       });
 
@@ -415,7 +415,7 @@ const getDMPExtensions = async (
     return Promise.all(items.map(async (item: DynamoExtensionItemType) => {
       // Destructure the Dynamo item because we don't need to return the PK and SK
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const {PK, SK, ...extension} = item;
+      const { PK, SK, ...extension } = item;
 
       // Fetch all the version timestamps
       const versions: DMPVersionType[] = await getDMPVersions(
@@ -482,7 +482,7 @@ export const createDMP = async (
     const exists: boolean = await DMPExists(dynamoConnectionParams, dmpId);
 
     if (exists) {
-      dynamoConnectionParams.logger.error({dmpId}, 'Latest version already exists');
+      dynamoConnectionParams.logger.error({ dmpId }, 'Latest version already exists');
       throw new DMPToolDynamoError('Latest version already exists');
     }
   }
@@ -652,22 +652,10 @@ export const updateDMP = async (
     const now = Date.now();
     const gracePeriod = gracePeriodInMS ? Number(gracePeriodInMS) : 7200000;
 
-    // We need to version the DMP if:
-    // - The provenance doesn't match, OR
-    // - The modified timestamp is older than the grace period, OR
-    // - The modified timestamp has changed (create snapshot of old version)
-const needToVersion: boolean = dmptoolExtension.provenance !== latest.dmp.provenance
-  || (now - lastModified) > gracePeriod;
-
-      console.log("***updateDMP versioning check***", {
-  dmpId,
-  previousModified: latest.dmp?.modified,
-  newModified: innerMetadata.modified,
-  provenanceChanged: dmptoolExtension.provenance !== latest.dmp.provenance,
-  gracePeriodElapsed: (now - lastModified) > gracePeriod,
-  needToVersion
-});
-
+    // We need to version the DMP if the provenance doesn't match or the modified
+    // timestamp is older than 2 hours ago
+    const needToVersion: boolean = dmptoolExtension.provenance !== latest.dmp.provenance
+      || (now - lastModified) > gracePeriod;
 
     dynamoConnectionParams.logger.debug(
       { dmpId, lastModified, now, gracePeriod, needToVersion },
@@ -684,12 +672,6 @@ const needToVersion: boolean = dmptoolExtension.provenance !== latest.dmp.proven
         latest.dmp,
         latest.dmp.modified
       );
-
-        console.log("***Snapshot creation completed***", {
-    dmpId,
-    snapshotModified: latest.dmp.modified
-  });
-
     }
 
     // Updates can only ever occur on the latest version of the DMP (the Plan logic
@@ -836,7 +818,7 @@ export const tombstoneDMP = async (
       // Update the RDA Common Standard metadata record
       await putItem(
         dynamoConnectionParams,
-        marshall(versionItem, {removeUndefinedValues: true})
+        marshall(versionItem, { removeUndefinedValues: true })
       );
       await deleteItem(
         dynamoConnectionParams,
