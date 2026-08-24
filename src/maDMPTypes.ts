@@ -65,6 +65,7 @@ export interface LoadDatasetInfo {
 export interface LoadRelatedWorkInfo {
   identifier: string;
   workType?: string;
+  relationType?: string;
 }
 
 export interface LoadNarrativeQuestionInfo {

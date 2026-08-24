@@ -1,7 +1,13 @@
 # dmptool-aws CHANGELOG
 
-## v2.1.8
+## v2.1.9
 - Fixed double protocol issues `download_url` and `access_url` by using `ensureHttpsProtocol` with them.
+
+## v2.1.8
+- Added `relationType` field to the Related works query in the maDMP generator
+- Upgraded `@dmptool/types` to 4.0.1
+- Removed old overrides for `@babel/core` and `js-yaml` since they are no longer needed
+- Added override for `brace-expansion` to address security vulnerability
 
 ## v2.1.7
 - Fixed bug with loading a plan's alternate identifiers
