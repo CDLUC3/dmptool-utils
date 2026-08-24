@@ -1,5 +1,8 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.9
+- Fixed double protocol issues `download_url` and `access_url` by using `ensureHttpsProtocol` with them.
+
 ## v2.1.8
 - Added `relationType` field to the Related works query in the maDMP generator
 - Upgraded `@dmptool/types` to 4.0.1

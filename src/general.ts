@@ -37,6 +37,20 @@ export const normaliseHttpProtocol = (
 }
 
 /**
+ * Check if a URL has a protocol (http or https), and if not, add https:// to the start of the URL.
+ * If the URL already has a protocol, it will be returned unchanged.
+ * @param url 
+ * @returns 
+ */
+export const ensureHttpsProtocol = (url: string): string => {
+  if (!url) return url;
+  if (url.includes('://')) {
+    return url.replace(/^http:\/\//, 'https://');
+  }
+  return `https://${url}`;
+};
+
+/**
  * Function to determine if the string is a valid date / time
  *
  * @param dateString the date string to validate
@@ -113,7 +127,7 @@ export const isNullOrUndefined = (val: unknown): boolean => {
  * @param obj An object (may contain nested objects and arrays)
  * @returns The object with null and undefined values removed.
  */
-export const removeNullAndUndefinedFromObject = (obj: any): any =>  {
+export const removeNullAndUndefinedFromObject = (obj: any): any => {
   if (Array.isArray(obj)) {
     return obj.map(removeNullAndUndefinedFromObject).filter(v => !isNullOrUndefined(v));
   } else if (!isNullOrUndefined(obj) && typeof obj === 'object') {

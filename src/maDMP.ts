@@ -7,6 +7,7 @@ import {
   isNullOrUndefined,
   isValidDate,
   normaliseHttpProtocol,
+  ensureHttpsProtocol,
   removeNullAndUndefinedFromObject,
 } from "./general";
 import {
@@ -1083,7 +1084,7 @@ const buildDMPToolExtensions = async (
     const id = plan.dmpId.replace('https://doi.org/', '');
 
     extensions.narrative = {
-      download_url: `https://${domainName}/dmps/${id}/narrative`,
+      download_url: `${ensureHttpsProtocol(domainName)}/dmps/${id}/narrative`,
       template: narrative
     };
   }
@@ -1563,7 +1564,7 @@ export async function planToDMPCommonStandard(
     || (isNullOrUndefined(yesFlag) && isNullOrUndefined(noFlag));
 
   // If we just
-  const hasEthicalIssues:string = unknownEthicalState
+  const hasEthicalIssues: string = unknownEthicalState
     ? 'unknown'
     : (isNullOrUndefined(yesFlag) ? 'no' : 'yes');
 
@@ -1617,13 +1618,13 @@ export async function planToDMPCommonStandard(
   // Generate the DMP Tool extensions to the RDA Common Standard
   const extensions: DMPToolExtensionType | undefined = includeExtensions
     ? await buildDMPToolExtensions(
-        rdsConnectionParams,
-        applicationName,
-        domainName,
-        plan,
-        project,
-        funding
-      )
+      rdsConnectionParams,
+      applicationName,
+      domainName,
+      plan,
+      project,
+      funding
+    )
     : undefined;
 
   rdsConnectionParams.logger.debug(
@@ -1633,11 +1634,11 @@ export async function planToDMPCommonStandard(
 
   // Return the combined DMP metadata record
   return includeExtensions && extensions
-  ? {
+    ? {
       dmp: {
         ...validateRDACommonStandard(rdsConnectionParams.logger, cleaned).dmp,
         ...validateDMPToolExtensions(rdsConnectionParams.logger, plan.dmpId, extensions),
       }
     }
-  : validateRDACommonStandard(rdsConnectionParams.logger, cleaned);
+    : validateRDACommonStandard(rdsConnectionParams.logger, cleaned);
 }
