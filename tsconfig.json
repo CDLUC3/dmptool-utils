@@ -14,6 +14,11 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["jest"]
   },
+    // Test files (src/__tests__) are included so that the editor, `npm run type-check` and ts-jest
+  // check them with this project's settings, including "types": ["jest"]. TypeScript 6 no longer
+  // adds @types packages automatically, so when the tests were excluded here, editors reported
+  // errors like "Cannot find name 'expect'" in them. The build uses tsconfig.build.json instead,
+  // which still excludes the tests.
   "include": ["src"],
-  "exclude": ["src/__tests__/**", "dist"]
+  "exclude": ["dist"]
 }

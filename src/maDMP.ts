@@ -1,6 +1,7 @@
 import { Validator } from 'jsonschema';
 import { Logger } from 'pino';
 import { ConnectionParams, queryTable } from './rds';
+import { DisplayLogic, DisplayLogicAnswer, DisplayLogicGroup, findHiddenQuestionIds } from './displayLogic';
 import {
   convertMySQLDateTimeToRFC3339,
   EnvironmentEnum,
@@ -393,6 +394,8 @@ const defaultDataset = (
  * @param projectId the Project ID to fetch the Dataset information for
  * @param planId the Plan ID to fetch the Dataset information for
  * @param language the language to use for the Dataset information
+ * @param hiddenQuestionIds the ids of the BASE questions (versionedQuestions) hidden by their
+ * display logic. Research outputs entered on a hidden question are ignored
  * @returns the dataset information needed to construct the DMP Common Standard
  */
 const loadDatasetInfo = async (
@@ -400,14 +403,15 @@ const loadDatasetInfo = async (
   applicationName: string,
   projectId: number,
   planId: number,
-  language = 'eng'
+  language = 'eng',
+  hiddenQuestionIds = new Set<number>()
 ): Promise<RDACommonStandardDataset[] | []> => {
   const datasets: RDACommonStandardDataset[] = [];
   const sql = `
-    SELECT a.json
+    SELECT a.versionedQuestionId, a.json
     FROM answers a
     WHERE a.planId = ?
-      AND a.json LIKE '%"researchOutputsTable"%';
+      AND a.json LIKE '%"researchOutputTable"%';
   `;
 
   rdsConnectionParams.logger.debug({ projectId, planId, sql }, 'Fetching research output information');
@@ -416,21 +420,33 @@ const loadDatasetInfo = async (
     sql,
     [planId.toString()]
   );
+  // Ignore the research outputs entered on a question that is hidden by its display logic
+  const results: any[] = resp && Array.isArray(resp.results)
+    ? resp.results.filter((result) => !hiddenQuestionIds.has(result.versionedQuestionId))
+    : [];
+
   // There would typically only be one research outputs question per plan, but
   // we need to allow for multiples just in case.
-  if (resp && Array.isArray(resp.results) && resp.results.length > 0) {
-    for (const result of resp.results) {
-      // Extract the column headings and the rows
-      const json: ResearchOutputTableAnswerType = result.json ? JSON.parse(result.json) : {};
+  if (results.length > 0) {
+    for (const result of results) {
+      // Extract the column headings and the rows. The answers.json column is a MySQL JSON column,
+      // which mysql2 returns as an object, but allow for a JSON string as well
+      const json: ResearchOutputTableAnswerType | undefined = typeof result.json === 'string'
+        ? JSON.parse(result.json)
+        : result.json;
+      const rows = Array.isArray(json?.answer) ? json.answer : [];
       const lang = language === 'eng' ? 'eng' : convertFiveCharToThreeChar(language);
 
       // Loop through the rows and construct the RDA Common Standard Dataset object
-      for (let idx = 0; idx < json.answer.length; idx++) {
-        const row = json.answer[idx];
-        datasets.push(buildDataset(applicationName, idx, row, projectId, planId, lang));
+      for (let idx = 0; idx < rows.length; idx++) {
+        datasets.push(buildDataset(applicationName, idx, rows[idx], projectId, planId, lang));
       }
     }
-  } else {
+  }
+
+  // Use the default dataset if no research outputs were defined, which is
+  // equivalent to the DMP having no answers to a Research Outputs question
+  if (datasets.length === 0) {
     rdsConnectionParams.logger.debug({ projectId, planId }, 'Using the default dataset');
     return [defaultDataset(applicationName, projectId, planId)];
   }
@@ -607,6 +623,121 @@ const SQL_NARRATIVE_CUSTOM_QUESTIONS = `
   WHERE vtc.templateCustomizationId = ? AND vtc.active = 1
   ORDER BY vcq.pinnedVersionedQuestionType, vcq.pinnedVersionedQuestionId;
 `;
+
+// Fetches the display (conditional) logic for the BASE questions on the Plan's template.
+// Note that versionedQuestionConditionGroups.triggerQuestionId references questions.id
+// so we need to resolve it to the versionedQuestion on the same versionedTemplate.
+const SQL_DISPLAY_LOGIC = `
+  SELECT vq.id AS versionedQuestionId,
+    vq.displayLogicAction, vq.displayLogicMatchType,
+    vqcg.id AS groupId, tvq.id AS triggerVersionedQuestionId,
+    vqc.conditionType, vqc.conditionMatch
+  FROM plans p
+    JOIN versionedQuestions vq ON vq.versionedTemplateId = p.versionedTemplateId
+      JOIN versionedQuestionConditionGroups vqcg ON vqcg.versionedQuestionId = vq.id
+        LEFT JOIN versionedQuestionConditions vqc
+          ON vqc.versionedQuestionConditionGroupId = vqcg.id
+        LEFT JOIN versionedQuestions tvq
+          ON tvq.questionId = vqcg.triggerQuestionId
+          AND tvq.versionedTemplateId = vq.versionedTemplateId
+  WHERE p.id = ?;
+`;
+
+// Fetches the BASE questions on the Plan's template in display order along with the Plan's answers.
+const SQL_DISPLAY_LOGIC_ANSWERS = `
+  SELECT q.id AS versionedQuestionId, a.json AS answerJSON
+  FROM plans p
+    JOIN versionedSections s ON s.versionedTemplateId = p.versionedTemplateId
+      JOIN versionedQuestions q ON q.versionedSectionId = s.id
+        LEFT JOIN answers a ON a.versionedQuestionId = q.id AND a.planId = p.id
+  WHERE p.id = ?
+  ORDER BY s.displayOrder, q.displayOrder;
+`;
+
+/**
+ * Groups the SQL_DISPLAY_LOGIC rows into the display logic for each versionedQuestion.
+ *
+ * @param rows the rows returned by SQL_DISPLAY_LOGIC
+ * @returns a map of versionedQuestionId to its display logic
+ */
+function buildDisplayLogicMap(rows: any[]): Map<number, DisplayLogic> {
+  const logicMap = new Map<number, DisplayLogic>();
+  const groupMap = new Map<number, DisplayLogicGroup>();
+
+  for (const row of rows) {
+    if (row.versionedQuestionId == null || row.groupId == null) continue;
+
+    let logic = logicMap.get(row.versionedQuestionId);
+    if (!logic) {
+      logic = {
+        action: row.displayLogicAction ?? 'SHOW_QUESTION',
+        matchType: row.displayLogicMatchType ?? 'ANY',
+        groups: [],
+      };
+      logicMap.set(row.versionedQuestionId, logic);
+    }
+
+    let group = groupMap.get(row.groupId);
+    if (!group) {
+      group = { triggerQuestionId: row.triggerVersionedQuestionId ?? null, conditions: [] };
+      groupMap.set(row.groupId, group);
+      logic.groups.push(group);
+    }
+
+    if (row.conditionType != null) {
+      group.conditions.push({ conditionType: row.conditionType, conditionMatch: row.conditionMatch ?? null });
+    }
+  }
+  return logicMap;
+}
+
+/**
+ * Determines which of the Plan's BASE questions (versionedQuestions) are hidden by their display
+ * (conditional) logic. See displayLogic.ts for the rules.
+ *
+ * @param rdsConnectionParams the connection parameters for the MySQL database
+ * @param planId the Plan ID
+ * @returns the ids of the hidden versionedQuestions (empty if none)
+ */
+const loadHiddenQuestionIds = async (
+  rdsConnectionParams: ConnectionParams,
+  planId: number
+): Promise<Set<number>> => {
+  rdsConnectionParams.logger.debug({ planId }, 'Fetching display logic information');
+  const logicRows = await queryTable(rdsConnectionParams, SQL_DISPLAY_LOGIC, [planId.toString()]);
+  const logicMap = buildDisplayLogicMap(Array.isArray(logicRows?.results) ? logicRows.results : []);
+
+  // Most templates have no display logic, so skip loading the answers
+  if (logicMap.size === 0) return new Set<number>();
+
+  const answerRows = await queryTable(rdsConnectionParams, SQL_DISPLAY_LOGIC_ANSWERS, [planId.toString()]);
+  const rows: any[] = Array.isArray(answerRows?.results) ? answerRows.results : [];
+  const answers = new Map<number, DisplayLogicAnswer>();
+  for (const row of rows) {
+    if (row.answerJSON != null) answers.set(row.versionedQuestionId, row.answerJSON);
+  }
+
+  return findHiddenQuestionIds(rows.map((row) => row.versionedQuestionId), logicMap, answers);
+};
+
+/**
+ * Removes the hidden BASE questions from the narrative sections.
+ *
+ * @param sections the narrative sections (modified in place)
+ * @param hiddenQuestionIds the ids of the hidden versionedQuestions
+ */
+function removeHiddenQuestions(
+  sections: DMPExtensionNarrativeSection[],
+  hiddenQuestionIds: Set<number>
+): void {
+  if (hiddenQuestionIds.size === 0) return;
+
+  for (const section of sections) {
+    section.question = section.question.filter((question) =>
+      question.type !== 'BASE' || !hiddenQuestionIds.has(question.id)
+    );
+  }
+}
 
 /**
  * Builds the base DMPExtensionNarrative structure from SQL_NARRATIVE_BASE rows.
@@ -793,11 +924,14 @@ function renumberOrders(sections: DMPExtensionNarrativeSection[]): void {
  *
  * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param planId the Plan ID to fetch the narrative information for
+ * @param hiddenQuestionIds the ids of the BASE questions (versionedQuestions) hidden by their
+ * display logic, which are left out of the narrative
  * @returns the DMP Tool Narrative extension for the DMP
  */
 const loadNarrativeTemplateInfo = async (
   rdsConnectionParams: ConnectionParams,
-  planId: number
+  planId: number,
+  hiddenQuestionIds = new Set<number>()
 ): Promise<DMPExtensionNarrative | undefined> => {
   // Step 1: base data and customization ID lookup in parallel
   rdsConnectionParams.logger.debug({ planId }, 'Fetching narrative base information');
@@ -838,7 +972,10 @@ const loadNarrativeTemplateInfo = async (
   //   null pinQuestionId → unshift within that section
   injectCustomQuestionsIntoBaseSections(narrative.section, customQuestionRows.results);
 
-  // Step 6: renumber display orders sequentially
+  // Step 6: remove any BASE questions hidden by their display (conditional) logic
+  removeHiddenQuestions(narrative.section, hiddenQuestionIds);
+
+  // Step 7: renumber display orders sequentially
   renumberOrders(narrative.section);
 
   return narrative;
@@ -976,6 +1113,7 @@ const buildContributors = (
  * @param plan the Plan information retrieve from the MySQL database
  * @param project the Project information retrieve from the MySQL database
  * @param funding the Funding information retrieve from the MySQL database
+ * @param hiddenQuestionIds the ids of the BASE questions hidden by their display logic
  * @returns the DMP metadata with extensions from the DMP Tool
  */
 const buildDMPToolExtensions = async (
@@ -985,6 +1123,7 @@ const buildDMPToolExtensions = async (
   plan: LoadPlanInfo,
   project: LoadProjectInfo,
   funding: LoadFundingInfo | undefined,
+  hiddenQuestionIds = new Set<number>(),
 ): Promise<DMPToolExtensionType> => {
   const extensions: DMPToolExtensionType = {
     rda_schema_version: RDA_COMMON_STANDARD_VERSION,
@@ -1000,7 +1139,8 @@ const buildDMPToolExtensions = async (
   // Generate the DMP Narrative
   const narrative = await loadNarrativeTemplateInfo(
     rdsConnectionParams,
-    plan.id
+    plan.id,
+    hiddenQuestionIds
   );
 
   rdsConnectionParams.logger.debug({ narrative }, 'Loaded narrative information');
@@ -1452,7 +1592,8 @@ const cleanRDACommonStandard = (
  * @param planId the ID of the plan to generate the DMP for
  * @param env The environment from EnvironmentEnum (defaults to EnvironmentEnum.DEV)
  * @param includeExtensions whether to include the DMP Tool extensions. Defaults to true.
- * @returns a JSON representation of the DMP
+ * @returns a JSON representation of the DMP. Questions hidden by their display (conditional) logic,
+ * and research outputs entered on a hidden question, are left out (see displayLogic.ts for the rules)
  */
 export async function planToDMPCommonStandard(
   rdsConnectionParams: ConnectionParams,
@@ -1514,13 +1655,18 @@ export async function planToDMPCommonStandard(
     );
   }
 
+  // Determine which questions are hidden by their display logic. They (and any research outputs
+  // entered on them) are left out of the DMP
+  const hiddenQuestionIds: Set<number> = await loadHiddenQuestionIds(rdsConnectionParams, plan.id);
+
   // Get all the funding and narrative info
   const datasets: RDACommonStandardDataset[] | [] = await loadDatasetInfo(
     rdsConnectionParams,
     applicationName,
     project.id,
     plan.id,
-    plan.languageId
+    plan.languageId,
+    hiddenQuestionIds
   );
   // We only allow one funding per plan at this time
   const fundings: LoadFundingInfo[] | [] = await loadFundingInfo(
@@ -1623,7 +1769,8 @@ export async function planToDMPCommonStandard(
       domainName,
       plan,
       project,
-      funding
+      funding,
+      hiddenQuestionIds
     )
     : undefined;
 
