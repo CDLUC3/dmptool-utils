@@ -1,5 +1,11 @@
 # dmptool-aws CHANGELOG
 
+## v2.1.10
+- Updated the maDMP narrative to load custom sections and questions from the `versionedTemplateCustomizationId` the Plan was pinned to when it was created, instead of the customization currently published for the creator's affiliation. 
+- Fixed the custom section joins to match on `customSectionId` so that custom questions and their answers are attached to the correct custom section
+- Added tests for loading custom sections and questions from a Plan's pinned customization
+- Removed a leftover `it.only` from the narrative test so the full `maDMP` test suite runs again
+
 ## v2.1.9
 - Fixed double protocol issues `download_url` and `access_url` by using `ensureHttpsProtocol` with them.
 

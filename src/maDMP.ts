@@ -535,18 +535,12 @@ const SQL_NARRATIVE_BASE = `
   ORDER BY s.displayOrder, q.displayOrder;
 `;
 
-// Fetches the PUBLISHED templateCustomizationId for the plan creator's org (if one exists).
+// Fetches the versionedTemplateCustomizationId the Plan was pinned to when it was created (if one exists).
+// This keeps the customizations with the Plan even if the creator's affiliation or the customization changes later.
 const SQL_NARRATIVE_CUSTOMIZATION_ID = `
-  SELECT tc.id AS templateCustomizationId
+  SELECT p.versionedTemplateCustomizationId
   FROM plans p
-    JOIN users u ON p.createdById = u.id
-    JOIN versionedTemplates vt ON p.versionedTemplateId = vt.id
-    JOIN templateCustomizations tc
-      ON tc.templateId = vt.templateId
-      AND tc.affiliationId = u.affiliationId
-      AND tc.status = 'PUBLISHED'
   WHERE p.id = ?
-  LIMIT 1;
 `;
 
 // Fetches the CUSTOM section narrative information for the Plan.
@@ -573,12 +567,12 @@ const SQL_NARRATIVE_CUSTOM_SECTIONS = `
       LEFT JOIN versionedCustomQuestions vcq
         ON vcq.versionedTemplateCustomizationId = vtc.id
         AND vcq.versionedSectionType = 'CUSTOM'
-        AND vcq.versionedSectionId = vcs.id
+        AND vcq.versionedSectionId = vcs.customSectionId
         LEFT JOIN answers a
-          ON a.versionedCustomSectionId = vcs.id
+          ON a.versionedCustomSectionId = vcs.customSectionId
           AND a.versionedCustomQuestionId = vcq.id
           AND a.planId = ?
-  WHERE vtc.templateCustomizationId = ? AND vtc.active = 1
+  WHERE vtc.id = ?
   ORDER BY vcs.pinnedVersionedSectionType, vcs.pinnedVersionedSectionId,
            vcq.pinnedVersionedQuestionType, vcq.pinnedVersionedQuestionId;
 `;
@@ -604,7 +598,7 @@ const SQL_NARRATIVE_CUSTOM_QUESTIONS = `
         ON a.versionedSectionId = vcq.versionedSectionId
         AND a.versionedCustomQuestionId = vcq.id
         AND a.planId = ?
-  WHERE vtc.templateCustomizationId = ? AND vtc.active = 1
+  WHERE vtc.id = ?
   ORDER BY vcq.pinnedVersionedQuestionType, vcq.pinnedVersionedQuestionId;
 `;
 
@@ -807,21 +801,21 @@ const loadNarrativeTemplateInfo = async (
   ]);
   if (!baseRows?.results?.length) return undefined;
 
-  const templateCustomizationId = customizationIdRow?.results?.[0]?.templateCustomizationId ?? null;
+  const versionedTemplateCustomizationId = customizationIdRow?.results?.[0]?.versionedTemplateCustomizationId ?? null;
 
-  // Step 2: fetch custom sections/questions in parallel (only if a customization exists)
+  // Step 2: fetch custom sections/questions in parallel (only if the Plan was created from a customized template)
   let customSectionRows: { results: any[], fields: any[] } = { results: [], fields: [] };
   let customQuestionRows: { results: any[], fields: any[] } = { results: [], fields: [] };
-  if (templateCustomizationId) {
+  if (versionedTemplateCustomizationId) {
     rdsConnectionParams.logger.debug(
-      { planId, templateCustomizationId },
+      { planId, versionedTemplateCustomizationId },
       'Fetching narrative customization information'
     );
     [customSectionRows, customQuestionRows] = await Promise.all([
       queryTable(rdsConnectionParams, SQL_NARRATIVE_CUSTOM_SECTIONS,
-        [planId.toString(), templateCustomizationId.toString()]),
+        [planId.toString(), versionedTemplateCustomizationId.toString()]),
       queryTable(rdsConnectionParams, SQL_NARRATIVE_CUSTOM_QUESTIONS,
-        [planId.toString(), templateCustomizationId.toString()]),
+        [planId.toString(), versionedTemplateCustomizationId.toString()]),
     ]);
   }
 

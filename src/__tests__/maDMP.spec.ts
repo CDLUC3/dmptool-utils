@@ -160,7 +160,8 @@ describe('planToDMPCommonStandard', () => {
 
   const mockRelatedWorks: LoadRelatedWorkInfo[] = [
     { identifier: 'https://example.org/works/29485674952', workType: 'dataset' },
-    { identifier: 'https://example.org/works/07070877856', workType: 'SOFTWARE' },
+    // The related works query lowercases workType, so the mock reflects that
+    { identifier: 'https://example.org/works/07070877856', workType: 'software' },
   ]
 
   const mockResearchOutputTableAnswer: ResearchOutputTableAnswerType = {
@@ -632,7 +633,7 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp?.registered).toBeUndefined();
     });
 
-    it.only('includes narrative in the DMP when present', async () => {
+    it('includes narrative in the DMP when present', async () => {
       // Mock all the calls to the RDS MySQL tables
       (queryTable as jest.Mock)
         .mockResolvedValueOnce({ results: [mockUnregisteredPlanInfo] })
@@ -677,6 +678,119 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp?.narrative?.template?.section[0].question[0].answer.json).toEqual(mockCompleteNarrative.section[0].question[0].answer.json);
     });
 
+    describe('customizations', () => {
+      // Mock all the calls to the RDS MySQL tables up to (and including) the base narrative query
+      const mockCallsThroughBaseNarrative = () => {
+        (queryTable as jest.Mock)
+          .mockResolvedValueOnce({ results: [mockUnregisteredPlanInfo] })
+          .mockResolvedValueOnce({ results: [mockProjectMinimumInfo] })
+          .mockResolvedValueOnce({ results: []})  // No Plan members
+          .mockResolvedValueOnce({ results: [mockPlanOwner] })  // Will use the plan owner
+          .mockResolvedValueOnce({ results: []})  // No Research Outputs
+          .mockResolvedValueOnce({ results: []})  // No Funding Info
+          .mockResolvedValueOnce({ results: [] }) // No Alternate Identifier Info
+          .mockResolvedValueOnce({ results: []})  // No Related Works Info
+          .mockResolvedValueOnce({ results: [defaultMemberRole] })
+          .mockResolvedValueOnce({ results: mockNarrativeResults });
+      };
+
+      // Find the calls to the custom section/question queries, which filter on the pinned customization
+      const findCustomizationCalls = () => (queryTable as jest.Mock).mock.calls
+        .filter(c => String(c[1]).includes('WHERE vtc.id = ?'));
+
+      it('includes custom questions from the customization the Plan was pinned to', async () => {
+        const mockCustomQuestion = {
+          versionedCustomQuestionId: 77,
+          customQuestionId: 70,
+          customQuestionText: 'NSF custom question',
+          customQuestionJSON: '{"type":"radioButtons"}',
+          baseSectionId: 1,
+          pinQuestionType: null,
+          pinQuestionId: null,
+          answerId: 5,
+          answerJSON: { type: "radioButtons", answer: "No", meta: { schemaVersion: "1.0" } }
+        };
+
+        mockCallsThroughBaseNarrative();
+        (queryTable as jest.Mock)
+          .mockResolvedValueOnce({ results: [{ versionedTemplateCustomizationId: 7 }] }) // Pinned customization
+          .mockResolvedValueOnce({ results: [] })  // No custom sections
+          .mockResolvedValueOnce({ results: [mockCustomQuestion] });
+
+        const result = await planToDMPCommonStandard(mockConfig, mockApplication, mockDomain, mockEnv, 123);
+
+        // The customization is looked up from the Plan, not the creator's current affiliation
+        const customizationIdCall = (queryTable as jest.Mock).mock.calls
+          .find(c => String(c[1]).includes('SELECT p.versionedTemplateCustomizationId'));
+        expect(customizationIdCall).toBeDefined();
+        expect(String(customizationIdCall[1])).not.toContain('affiliationId');
+
+        // Custom sections/questions are fetched for that specific customization version, regardless of active status
+        const customCalls = findCustomizationCalls();
+        expect(customCalls).toHaveLength(2);
+        customCalls.forEach(c => {
+          expect(c[2]).toEqual(['123', '7']);
+          expect(String(c[1])).not.toContain('vtc.active');
+        });
+
+        const customQuestion = result?.dmp?.narrative?.template?.section[0].question.find(q => q.type === 'CUSTOM');
+        expect(customQuestion?.id).toEqual(77);
+        expect(customQuestion?.answer?.json).toEqual(mockCustomQuestion.answerJSON);
+      });
+
+      it('includes custom sections, joining questions and answers on the draft customSectionId', async () => {
+        // After a customization is republished, the versionedCustomSections row gets a new id (4) while the
+        // customSectionId (3) stays the same. Custom questions and answers reference the customSectionId.
+        const mockCustomSectionRow = {
+          versionedCustomSectionId: 4,
+          customSectionId: 3,
+          customSectionName: 'NSF Custom Section',
+          pinSectionType: 'BASE',
+          pinSectionId: 1,
+          versionedCustomQuestionId: 88,
+          customQuestionId: 80,
+          customQuestionText: 'NSF custom section question',
+          customQuestionJSON: '{"type":"text"}',
+          pinQuestionType: null,
+          pinQuestionId: null,
+          answerId: 9,
+          answerJSON: { type: "text", answer: "Custom section answer", meta: { schemaVersion: "1.0" } }
+        };
+
+        mockCallsThroughBaseNarrative();
+        (queryTable as jest.Mock)
+          .mockResolvedValueOnce({ results: [{ versionedTemplateCustomizationId: 7 }] }) // Pinned customization
+          .mockResolvedValueOnce({ results: [mockCustomSectionRow] })
+          .mockResolvedValueOnce({ results: [] });  // No custom questions in BASE sections
+
+        const result = await planToDMPCommonStandard(mockConfig, mockApplication, mockDomain, mockEnv, 123);
+
+        const customSectionsSQL = String(findCustomizationCalls()
+          .find(c => String(c[1]).includes('JOIN versionedCustomSections vcs'))?.[1]);
+        expect(customSectionsSQL).toContain('vcq.versionedSectionId = vcs.customSectionId');
+        expect(customSectionsSQL).toContain('a.versionedCustomSectionId = vcs.customSectionId');
+
+        // The custom section is pinned after the first BASE section
+        const customSection = result?.dmp?.narrative?.template?.section.find(s => s.type === 'CUSTOM');
+        expect(customSection?.id).toEqual(4);
+        expect(customSection?.title).toEqual('NSF Custom Section');
+        expect(customSection?.question).toHaveLength(1);
+        expect(customSection?.question[0].id).toEqual(88);
+        expect(customSection?.question[0].answer?.json).toEqual(mockCustomSectionRow.answerJSON);
+      });
+
+      it('does not fetch custom sections or questions when the Plan has no pinned customization', async () => {
+        mockCallsThroughBaseNarrative();
+        (queryTable as jest.Mock)
+          .mockResolvedValueOnce({ results: [{ versionedTemplateCustomizationId: null }] });
+
+        const result = await planToDMPCommonStandard(mockConfig, mockApplication, mockDomain, mockEnv, 123);
+
+        expect(findCustomizationCalls()).toHaveLength(0);
+        expect(result?.dmp?.narrative?.template?.section.some(s => s.type === 'CUSTOM')).toBe(false);
+      });
+    });
+
     it('includes members in the DMP when present', async () => {
       // Mock all the calls to the RDS MySQL tables
       (queryTable as jest.Mock)
@@ -711,6 +825,7 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: []})  // No Funding Info
+        .mockResolvedValueOnce({results: []})  // No Alternate Identifier Info
         .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -906,7 +1021,8 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: []})  // No Research Outputs
         .mockResolvedValueOnce({results: []})  // No Funding Info
-        .mockResolvedValueOnce({ results: mockAlternateIdentifiers })
+        // The alternate identifiers query returns rows with an alternateIdentifier column
+        .mockResolvedValueOnce({ results: mockAlternateIdentifiers.map((alternateIdentifier) => ({ alternateIdentifier })) })
         .mockResolvedValueOnce({results: []}) // No related works
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
@@ -922,9 +1038,9 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp?.alternate_identifier).toBeDefined();
       expect(result?.dmp?.alternate_identifier).toHaveLength(2);
       expect(result?.dmp?.alternate_identifier[0].identifier).toEqual(mockAlternateIdentifiers[0]);
-      expect(result?.dmp?.related_identifier[0].type).toEqual('url');
+      expect(result?.dmp?.alternate_identifier[0].type).toEqual('url');
       expect(result?.dmp?.alternate_identifier[1].identifier).toEqual(mockAlternateIdentifiers[1]);
-      expect(result?.dmp?.related_identifier[1].type).toEqual('other');
+      expect(result?.dmp?.alternate_identifier[1].type).toEqual('other');
     });
 
     it('includes related works in the DMP when present', async () => {
@@ -1008,7 +1124,8 @@ describe('planToDMPCommonStandard', () => {
         .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
         .mockResolvedValueOnce({results: [mockResearchOutputs]})
         .mockResolvedValueOnce({results: []})  // No Funding Info
-        .mockResolvedValueOnce({results: []})
+        .mockResolvedValueOnce({results: []})  // No Alternate Identifier Info
+        .mockResolvedValueOnce({results: []})  // No Related Works Info
         .mockResolvedValueOnce({results: [defaultMemberRole]});
 
       const result = await planToDMPCommonStandard(
