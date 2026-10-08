@@ -1,6 +1,12 @@
 # dmptool-aws CHANGELOG
 
+- Fixed research outputs with blank fields making the DMP fail RDA Common Standard validation (e.g. when downloading the DMP). Only the title is required on the Research Output form, but blank columns were exported as-is (e.g. `issued: ""`, and repositories, metadata standards and licenses with an empty ID). Blank fields and entries with no ID are now left out of the export
+- The form's `restricted` access level is now exported as the RDA Common Standard's `shared` (`restricted` isn't an allowed `data_access` value), and a missing access level defaults to `closed`
+- A license's `start_date` (required by the RDA Common Standard) is the Anticipated Release Date, or the current date when there isn't one
+- Fixed `PB` file sizes not being converted to bytes
 
+
+## v2.2.0
 - Added `displayLogic` helpers (`isQuestionVisible`, `findHiddenQuestionIds`, `evaluateCondition`, `extractAnswerValues`) that decide which questions are hidden by their display (conditional) logic, so every service applies the same rules
 - Fixed research outputs never being added to the DMP `dataset`: the query looked for the answer type `researchOutputsTable` instead of `researchOutputTable`, and the `answers.json` value (returned by mysql2 as an object) was passed to `JSON.parse`
 - `planToDMPCommonStandard` now applies display (conditional) logic: questions hidden by their display logic are left out of the narrative, and research outputs entered on a hidden question are left out of the `dataset` list. The answers to hidden questions are not changed in the database
