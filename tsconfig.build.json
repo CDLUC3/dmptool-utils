@@ -1,0 +1,12 @@
+// This tsconfig is used for building the project (npm run build). It extends the main tsconfig.json
+// but excludes the test files (src/__tests__) so that they are not compiled into dist/, which is
+// what gets published to npm.
+
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": ["src/__tests__/**", "dist"]
+}

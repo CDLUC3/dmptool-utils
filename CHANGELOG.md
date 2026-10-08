@@ -1,5 +1,12 @@
 # dmptool-aws CHANGELOG
 
+
+- Added `displayLogic` helpers (`isQuestionVisible`, `findHiddenQuestionIds`, `evaluateCondition`, `extractAnswerValues`) that decide which questions are hidden by their display (conditional) logic, so every service applies the same rules
+- Fixed research outputs never being added to the DMP `dataset`: the query looked for the answer type `researchOutputsTable` instead of `researchOutputTable`, and the `answers.json` value (returned by mysql2 as an object) was passed to `JSON.parse`
+- `planToDMPCommonStandard` now applies display (conditional) logic: questions hidden by their display logic are left out of the narrative, and research outputs entered on a hidden question are left out of the `dataset` list. The answers to hidden questions are not changed in the database
+- Type-check the tests: `tsconfig.json` now includes `src/__tests__` (TypeScript 6 no longer includes `@types/jest` automatically, so editors reported errors in the excluded test files), and the build uses the new `tsconfig.build.json`, which still excludes them from the build
+- Removed an `it.only` in `maDMP.spec.ts` that was skipping 12 tests, and fixed the 4 of them that were failing (out of date mocks and a wrong assertion)
+
 ## v2.1.9
 - Fixed double protocol issues `download_url` and `access_url` by using `ensureHttpsProtocol` with them.
 

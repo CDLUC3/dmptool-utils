@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "2.1.9",
+  "version": "2.2.0",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,7 +20,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "npm run clean && tsc",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "eslint . --ignore-pattern dist/ --ignore-pattern node_modules/",
     "prepublishOnly": "npm run build",

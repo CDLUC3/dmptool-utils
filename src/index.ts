@@ -1,5 +1,6 @@
 // Entrypoint for the package
 export * from './cloudFormation';
+export * from './displayLogic';
 export * from './dynamo';
 export * from './general';
 export * from './logger';
