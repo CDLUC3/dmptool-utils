@@ -17,7 +17,7 @@ jest.mock('../rds');
 
 import pino, { Logger } from 'pino';
 import { queryTable } from "../rds";
-import { convertMySQLDateTimeToRFC3339, EnvironmentEnum } from "../general";
+import { convertMySQLDateTimeToRFC3339, currentDateAsString, EnvironmentEnum } from "../general";
 
 const mockLogger: Logger = pino({ level: 'silent' });
 
@@ -1011,6 +1011,113 @@ describe('planToDMPCommonStandard', () => {
       expect(result?.dmp?.dataset[0].language).toEqual('por');
       expect(result?.dmp?.dataset[0].distribution).toBeUndefined();
       expect(result?.dmp?.dataset[0].metadata).toBeUndefined();
+    });
+
+    describe('research outputs with blank columns', () => {
+      // Builds a research output row the way the UI saves it when columns are left blank
+      const buildPartialResearchOutputs = (overrides: Record<string, unknown> = {}) => {
+        const answers: Record<string, { type: string, answer: unknown }> = {
+          title: { type: 'text', answer: 'My partial dataset' },
+          description: { type: 'textArea', answer: '' },
+          type: { type: 'selectBox', answer: '' },
+          data_flags: { type: 'checkBoxes', answer: [] },
+          data_access: { type: 'radioButtons', answer: '' },
+          issued: { type: 'date', answer: '' },
+          byte_size: { type: 'numberWithContext', answer: { value: 0, context: 'MB' } },
+          host: { type: 'repositorySearch', answer: [{ repositoryId: '', repositoryName: '' }] },
+          metadata: { type: 'metadataStandardSearch', answer: [{ metadataStandardId: '', metadataStandardName: '' }] },
+          license_ref: { type: 'licenseSearch', answer: [{ licenseId: '', licenseName: '' }] },
+        };
+        for (const [id, answer] of Object.entries(overrides)) {
+          answers[id] = { ...answers[id], answer };
+        }
+
+        return {
+          json: JSON.stringify({
+            answer: [{
+              columns: Object.entries(answers).map(([id, col]) => ({
+                ...col,
+                commonStandardId: id,
+                meta: { schemaVersion: 'v1.0' }
+              })),
+            }],
+            columnHeadings: Object.keys(answers),
+            meta: { schemaVersion: '1.0' },
+            type: 'researchOutputTable'
+          })
+        };
+      };
+
+      const runWithResearchOutputs = async (researchOutputs: { json: string }) => {
+        (queryTable as jest.Mock)
+          .mockResolvedValueOnce({results: [mockUnregisteredPlanInfo]})
+          .mockResolvedValueOnce({results: [mockProjectMinimumInfo]})
+          .mockResolvedValueOnce({results: []})  // No Plan members
+          .mockResolvedValueOnce({results: [mockPlanOwner]})  // Will use the plan owner
+          .mockResolvedValueOnce({ results: [] })  // No display logic
+          .mockResolvedValueOnce({results: [researchOutputs]})
+          .mockResolvedValueOnce({results: []})  // No Funding Info
+          .mockResolvedValueOnce({results: []})  // No Alternate Identifier Info
+          .mockResolvedValueOnce({results: []})  // No Related Works Info
+          .mockResolvedValueOnce({results: [defaultMemberRole]});
+
+        // planToDMPCommonStandard throws if the result fails RDA Common Standard validation
+        return planToDMPCommonStandard(mockConfig, mockApplication, mockDomain, mockEnv, 456);
+      };
+
+      it('produces a valid dataset when only the title is filled in', async () => {
+        const result = await runWithResearchOutputs(buildPartialResearchOutputs());
+
+        const dataset = result?.dmp.dataset[0];
+        expect(dataset.title).toEqual('My partial dataset');
+        expect(dataset.type).toEqual('dataset');
+        expect(dataset.description).toBeUndefined();
+        expect(dataset.issued).toBeUndefined();
+        expect(dataset.metadata).toBeUndefined();
+        expect(dataset.distribution).toBeUndefined();
+      });
+
+      it('defaults the access level to closed when a repository has no access level', async () => {
+        const result = await runWithResearchOutputs(buildPartialResearchOutputs({
+          host: [{ repositoryId: 'https://example.org/repositories/123', repositoryName: 'Example Repository' }]
+        }));
+
+        const distribution = result?.dmp.dataset[0].distribution;
+        expect(distribution).toHaveLength(1);
+        expect(distribution[0].data_access).toEqual('closed');
+        expect(distribution[0].host.url).toEqual('https://example.org/repositories/123');
+        expect(distribution[0].byte_size).toBeUndefined();
+        expect(distribution[0].issued).toBeUndefined();
+        expect(distribution[0].license).toBeUndefined();
+      });
+
+      it('converts the restricted access level to shared and petabytes to bytes', async () => {
+        const result = await runWithResearchOutputs(buildPartialResearchOutputs({
+          data_access: 'restricted',
+          byte_size: { value: 2, context: 'pb' },
+          host: [{ repositoryId: 'https://example.org/repositories/123', repositoryName: 'Example Repository' }]
+        }));
+
+        const distribution = result?.dmp.dataset[0].distribution;
+        expect(distribution[0].data_access).toEqual('shared');
+        expect(distribution[0].byte_size).toEqual(2e15);
+      });
+
+      it('uses the current date as the license start date when there is no anticipated release date', async () => {
+        const result = await runWithResearchOutputs(buildPartialResearchOutputs({
+          data_access: 'open',
+          host: [{ repositoryId: 'https://example.org/repositories/123', repositoryName: 'Example Repository' }],
+          license_ref: [{ licenseId: 'https://example.org/licenses/123', licenseName: 'Example License' }]
+        }));
+
+        const distribution = result?.dmp.dataset[0].distribution;
+        expect(distribution).toHaveLength(1);
+        expect(distribution[0].data_access).toEqual('open');
+        expect(distribution[0].issued).toBeUndefined();
+        expect(distribution[0].license).toHaveLength(1);
+        expect(distribution[0].license[0].license_ref).toEqual('https://example.org/licenses/123');
+        expect(distribution[0].license[0].start_date).toEqual(currentDateAsString());
+      });
     });
 
     it('includes a complete set of datasets in the DMP when present', async () => {

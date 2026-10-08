@@ -4,6 +4,7 @@ import { ConnectionParams, queryTable } from './rds';
 import { DisplayLogic, DisplayLogicAnswer, DisplayLogicGroup, findHiddenQuestionIds } from './displayLogic';
 import {
   convertMySQLDateTimeToRFC3339,
+  currentDateAsString,
   EnvironmentEnum,
   isNullOrUndefined,
   isValidDate,
@@ -1300,6 +1301,18 @@ const buildProject = (
   }
 }
 
+// The allowed values for a Distribution's data_access in the RDA Common Standard
+const DATA_ACCESS_LEVELS = ['open', 'shared', 'closed'];
+
+/**
+ * Determines whether a research output column answer was left blank.
+ * @param val the answer value
+ * @returns true if the value is null, undefined or an empty/whitespace-only string
+ */
+const isBlank = (val: unknown): boolean => {
+  return isNullOrUndefined(val) || (typeof val === 'string' && val.trim() === '');
+}
+
 /**
  * Extracts the specified column from the columns of a ResearchOutputTable answer row.
  * @param id the ID of the column to extract
@@ -1323,18 +1336,20 @@ const findColumnById = (
  * @returns the byte size if it could be converted, otherwise undefined
  */
 const byteSizeToBytes = (size: NumberWithContextAnswerType): number | undefined => {
-  if (isNullOrUndefined(size) || isNullOrUndefined(size.answer.value)) {
+  // A value of 0 means the user left the File Size blank
+  if (isNullOrUndefined(size) || isNullOrUndefined(size.answer?.value) || size.answer.value <= 0) {
     return undefined;
   }
 
   const multipliers: Record<string, number> = {
+    'PB': 1e15,
     'TB': 1e12,
     'GB': 1e9,
     'MB': 1e6,
     'KB': 1e3,
   };
 
-  const context = size.answer.context.toUpperCase();
+  const context = (size.answer.context ?? '').toUpperCase();
   // If the context has a match in our multipliers, use it, otherwise use 1 as a fallback
   const multiplier = multipliers[context] ?? 1;
 
@@ -1374,13 +1389,18 @@ const buildDataset = (
 
   // The large RDA Common Standard Research Output representation.
   // Any properties that are commented out are ones that we do not currently support.
+  // Any column the user left blank is omitted since the RDA Common Standard only
+  // requires the title, dataset_id, personal_data and sensitive_data.
+  const datasetTitle = isBlank(title?.answer) ? `Dataset ${rowIdx + 1}` : title.answer;
 
-  // Build the Metadata object from the Metadata Standards defined on the Research Output
-  const metadata = isNullOrUndefined(meta)
+  // Build the Metadata object from the Metadata Standards defined on the Research Output.
+  // Entries without an ID are skipped because the metadata_standard_id is required
+  const metadataStandards = (meta?.answer ?? []).filter((m) => !isBlank(m?.metadataStandardId));
+  const metadata = metadataStandards.length === 0
     ? undefined
-    : meta.answer.map((m) => {
+    : metadataStandards.map((m) => {
       return {
-        description: m.metadataStandardName,
+        description: isBlank(m.metadataStandardName) ? undefined : m.metadataStandardName,
         // RDA Common Standard requires the language, but we can't get it from
         // the metadata standard repository we use, so just default it
         language: 'eng',
@@ -1392,34 +1412,45 @@ const buildDataset = (
     });
 
   // Get the Anticipated Release Date for the dataset
-  const issued = isNullOrUndefined(access_date) ? undefined : access_date.answer
+  const issued = isBlank(access_date?.answer) ? undefined : access_date.answer;
 
-  // Build the License object from the Licenses defined on the Research Output
-  const licenses = isNullOrUndefined(license)
+  // Build the License object from the Licenses defined on the Research Output.
+  // The license start_date is required, so use the Anticipated Release Date or,
+  // if there isn't one, the current date. Entries without an ID are skipped.
+  const licenseRefs = (license?.answer ?? []).filter((l) => !isBlank(l?.licenseId));
+  const licenses = licenseRefs.length === 0
     ? undefined
-    : license.answer.map((l) => {
+    : licenseRefs.map((l) => {
       return {
         license_ref: l.licenseId,
-        start_date: issued
+        start_date: issued ?? currentDateAsString()
       }
     });
 
-  // Build the Distribution object from the Repositories defined on the Research Output
-  const distribution = isNullOrUndefined(host)
+  // The data_access is required on a Distribution and must be one of the allowed
+  // values. The form's 'restricted' option is the RDA Common Standard's 'shared',
+  // and we default to the most conservative option if none was selected
+  const accessLevel = access?.answer === 'restricted' ? 'shared' : access?.answer;
+  const dataAccess = DATA_ACCESS_LEVELS.includes(accessLevel) ? accessLevel : 'closed';
+
+  // Build the Distribution object from the Repositories defined on the Research Output.
+  // Entries without an ID are skipped because the host title and url are required
+  const repositories = (host?.answer ?? []).filter((h) => !isBlank(h?.repositoryId));
+  const distribution = repositories.length === 0
     ? undefined
-    : host.answer.map((h) => {
+    : repositories.map((h) => {
       return {
-        title: isNullOrUndefined(title) ? `Dataset ${rowIdx + 1}` : title.answer,
+        title: datasetTitle,
         // description: 'This is a test distribution',
         // access_url: 'https://example.com/dataset/123/distribution/123456789',
         // download_url: 'https://example.com/dataset/123/distribution/123456789/download',
         byte_size: isNullOrUndefined(byte_size) ? undefined : byteSizeToBytes(byte_size),
         // format: ['application/zip'],
-        data_access: isNullOrUndefined(access) ? 'restricted' : access.answer,
+        data_access: dataAccess,
         issued,
         license: licenses,
         host: {
-          title: h.repositoryName,
+          title: isBlank(h.repositoryName) ? h.repositoryId : h.repositoryName,
           // description: 'This is a test host',
           url: h.repositoryId,
           host_id: [{
@@ -1439,9 +1470,9 @@ const buildDataset = (
     });
 
   return {
-    title: isNullOrUndefined(title) ? `Dataset ${rowIdx + 1}` : title.answer,
-    type: isNullOrUndefined(typ) ? 'dataset' : typ.answer,
-    description: isNullOrUndefined(desc) ? undefined : desc.answer,
+    title: datasetTitle,
+    type: isBlank(typ?.answer) ? 'dataset' : typ.answer,
+    description: isBlank(desc?.answer) ? undefined : desc.answer,
     dataset_id: {
       identifier: `${internalIdBase(applicationName, projectId, planId)}.outputs.${rowIdx + 1}`,
       type: 'other'
