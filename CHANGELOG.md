@@ -1,12 +1,19 @@
 # dmptool-aws CHANGELOG
 
+## v2.2.2
 - Fixed research outputs with blank fields making the DMP fail RDA Common Standard validation (e.g. when downloading the DMP). Only the title is required on the Research Output form, but blank columns were exported as-is (e.g. `issued: ""`, and repositories, metadata standards and licenses with an empty ID). Blank fields and entries with no ID are now left out of the export
 - The form's `restricted` access level is now exported as the RDA Common Standard's `shared` (`restricted` isn't an allowed `data_access` value), and a missing access level defaults to `closed`
 - A license's `start_date` (required by the RDA Common Standard) is the Anticipated Release Date, or the current date when there isn't one
 - Fixed `PB` file sizes not being converted to bytes
 
+## v2.2.1
+
+- `planToDMPCommonStandard` now gets the custom sections and questions from the template customization the Plan was pinned to when it was created (`plans.versionedTemplateCustomizationId`), instead of the plan creator's current affiliation. Custom sections and questions no longer disappear from the narrative when the creator changes their affiliation, or when a newer version of the customization is published. Requires the `versionedTemplateCustomizationId` column on the `plans` table, added in dmptool-apollo-server [#388]
+- Updated `SQL_NARRATIVE_CUSTOMIZATION_ID` to read `versionedTemplateCustomizationId` from the Plan, and `SQL_NARRATIVE_CUSTOM_SECTIONS` and `SQL_NARRATIVE_CUSTOM_QUESTIONS` to look up the customization by `versionedTemplateCustomizations.id` instead of `templateCustomizationId` and `active` status
+- Added tests for loading custom questions from the Plan's pinned customization, and for skipping them when the Plan has none
 
 ## v2.2.0
+
 - Added `displayLogic` helpers (`isQuestionVisible`, `findHiddenQuestionIds`, `evaluateCondition`, `extractAnswerValues`) that decide which questions are hidden by their display (conditional) logic, so every service applies the same rules
 - Fixed research outputs never being added to the DMP `dataset`: the query looked for the answer type `researchOutputsTable` instead of `researchOutputTable`, and the `answers.json` value (returned by mysql2 as an object) was passed to `JSON.parse`
 - `planToDMPCommonStandard` now applies display (conditional) logic: questions hidden by their display logic are left out of the narrative, and research outputs entered on a hidden question are left out of the `dataset` list. The answers to hidden questions are not changed in the database
