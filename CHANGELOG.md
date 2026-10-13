@@ -1,6 +1,14 @@
 # dmptool-aws CHANGELOG
 
 
+## v2.2.1
+
+- `planToDMPCommonStandard` now gets the custom sections and questions from the template customization the Plan was pinned to when it was created (`plans.versionedTemplateCustomizationId`), instead of the plan creator's current affiliation. Custom sections and questions no longer disappear from the narrative when the creator changes their affiliation, or when a newer version of the customization is published. Requires the `versionedTemplateCustomizationId` column on the `plans` table, added in dmptool-apollo-server [#388]
+- Updated `SQL_NARRATIVE_CUSTOMIZATION_ID` to read `versionedTemplateCustomizationId` from the Plan, and `SQL_NARRATIVE_CUSTOM_SECTIONS` and `SQL_NARRATIVE_CUSTOM_QUESTIONS` to look up the customization by `versionedTemplateCustomizations.id` instead of `templateCustomizationId` and `active` status
+- Added tests for loading custom questions from the Plan's pinned customization, and for skipping them when the Plan has none
+
+## v2.2.0
+
 - Added `displayLogic` helpers (`isQuestionVisible`, `findHiddenQuestionIds`, `evaluateCondition`, `extractAnswerValues`) that decide which questions are hidden by their display (conditional) logic, so every service applies the same rules
 - Fixed research outputs never being added to the DMP `dataset`: the query looked for the answer type `researchOutputsTable` instead of `researchOutputTable`, and the `answers.json` value (returned by mysql2 as an object) was passed to `JSON.parse`
 - `planToDMPCommonStandard` now applies display (conditional) logic: questions hidden by their display logic are left out of the narrative, and research outputs entered on a hidden question are left out of the `dataset` list. The answers to hidden questions are not changed in the database
