@@ -1,5 +1,10 @@
 # dmptool-aws CHANGELOG
 
+## v2.2.2
+- Fixed research outputs with blank fields making the DMP fail RDA Common Standard validation (e.g. when downloading the DMP). Only the title is required on the Research Output form, but blank columns were exported as-is (e.g. `issued: ""`, and repositories, metadata standards and licenses with an empty ID). Blank fields and entries with no ID are now left out of the export
+- The form's `restricted` access level is now exported as the RDA Common Standard's `shared` (`restricted` isn't an allowed `data_access` value), and a missing access level defaults to `closed`
+- A license's `start_date` (required by the RDA Common Standard) is the Anticipated Release Date, or the current date when there isn't one
+- Fixed `PB` file sizes not being converted to bytes
 
 ## v2.2.1
 
