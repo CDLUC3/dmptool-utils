@@ -1,4 +1,11 @@
-# dmptool-aws CHANGELOG
+# dmptool-utils CHANGELOG
+
+## v2.2.3
+- Updated `maDMP` to allow for multiple `funding` entries in the `dmp.project` array
+- Fixed bug where the `funding_status` was being overwritten
+- Added `RDACommonStandardFunding` interface to `maDMPTypes`
+- Removed old override for `brace-expansion` since it is no longer needed
+- Updated dependencies
 
 ## v2.2.2
 - Fixed research outputs with blank fields making the DMP fail RDA Common Standard validation (e.g. when downloading the DMP). Only the title is required on the Research Output form, but blank columns were exported as-is (e.g. `issued: ""`, and repositories, metadata standards and licenses with an empty ID). Blank fields and entries with no ID are now left out of the export

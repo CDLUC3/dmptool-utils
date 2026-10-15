@@ -1,6 +1,6 @@
 {
   "name": "@dmptool/utils",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Helper/Utility functions for use in the DMP Tool services. Particularly AWS tooling and maDMP serialization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,9 +30,6 @@
     "type-check": "tsc --noEmit",
     "trivy-high": "./scripts/trivy-high.sh",
     "trivy-med": "./scripts/trivy-med.sh"
-  },
-  "overrides": {
-    "brace-expansion": "5.0.9"
   },
   "dependencies": {
     "@aws-sdk/s3-presigned-post": "^3.1076.0",

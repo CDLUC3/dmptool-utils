@@ -1,15 +1,20 @@
 import { Validator } from 'jsonschema';
 import { Logger } from 'pino';
 import { ConnectionParams, queryTable } from './rds';
-import { DisplayLogic, DisplayLogicAnswer, DisplayLogicGroup, findHiddenQuestionIds } from './displayLogic';
+import {
+  DisplayLogic,
+  DisplayLogicAnswer,
+  DisplayLogicGroup,
+  findHiddenQuestionIds
+} from './displayLogic';
 import {
   convertMySQLDateTimeToRFC3339,
   currentDateAsString,
+  ensureHttpsProtocol,
   EnvironmentEnum,
   isNullOrUndefined,
   isValidDate,
   normaliseHttpProtocol,
-  ensureHttpsProtocol,
   removeNullAndUndefinedFromObject,
 } from "./general";
 import {
@@ -36,22 +41,23 @@ import {
   DMPExtensionFunderOpportunityType,
   DMPExtensionFunderProjectType,
   DMPExtensionNarrative,
-  DMPExtensionNarrativeSection,
   DMPExtensionNarrativeQuestion,
+  DMPExtensionNarrativeSection,
   LoadFundingInfo,
   LoadMemberInfo,
   LoadPlanInfo,
   LoadProjectInfo,
   LoadRelatedWorkInfo,
   RDACommonStandardAffiliation,
+  RDACommonStandardAlternateIdentifier,
   RDACommonStandardContact,
   RDACommonStandardContributor,
   RDACommonStandardDataset,
+  RDACommonStandardFunding,
   RDACommonStandardIdentifierType,
   RDACommonStandardProject,
   RDACommonStandardRelatedWork,
   StandardIdentifierType,
-  RDACommonStandardAlternateIdentifier,
 } from "./maDMPTypes";
 
 const ROR_REGEX = /^https?:\/\/ror\.org\/[0-9a-zA-Z]+$/;
@@ -103,18 +109,18 @@ function formatORCID(env: EnvironmentEnum, orcidIn: string): string | null {
  */
 function determineIdentifierType(uri: string): string {
   if (isNullOrUndefined(uri)) {
-    return 'other';
+    return StandardIdentifierType.OTHER;
   }
   if (uri.match(ORCID_REGEX)) {
-    return 'orcid';
+    return StandardIdentifierType.ORCID;
   } else if (uri.match(DOI_REGEX)) {
-    return 'doi';
+    return StandardIdentifierType.DOI;
   } else if (uri.match(ROR_REGEX)) {
-    return 'ror';
+    return StandardIdentifierType.ROR;
   } else if (uri.startsWith('http')) {
-    return 'url';
+    return StandardIdentifierType.URL;
   } else {
-    return 'other';
+    return StandardIdentifierType.OTHER;
   }
 }
 
@@ -282,7 +288,7 @@ const loadFundingInfo = async (
     fundings.forEach((funding) =>
       funding.status = planFundingStatusToDMPFundingStatus(funding.status)
     )
-    return resp.results;
+    return fundings;
   }
   return [];
 }
@@ -376,7 +382,7 @@ const defaultDataset = (
   return {
     dataset_id: {
       identifier: `${internalIdBase(applicationName, projectId, planId)}.outputs.1`,
-      type: 'other'
+      type: StandardIdentifierType.OTHER
     },
     personal_data: 'unknown',
     sensitive_data: 'unknown',
@@ -1009,7 +1015,7 @@ const buildContact = async (
     const contactEntry: RDACommonStandardContact = {
       contact_id: [{
         identifier: orcid !== null ? orcid : primary.email,
-        type: orcid !== null ? determineIdentifierType(orcid) : 'other',
+        type: orcid !== null ? determineIdentifierType(orcid) : StandardIdentifierType.OTHER,
       }],
       mbox: primary.email,
       name: [primary.givenName, primary.surName].filter((n) => n).join(' ').trim(),
@@ -1080,7 +1086,7 @@ const buildContributors = (
       // RDA Common Standard requires an id so generate one
       contrib.contributor_id = [{
         identifier: `${internalIdBase(applicationName, projectId, planId)}.members.${member.id}`,
-        type: 'other'
+        type: StandardIdentifierType.OTHER
       }]
     }
 
@@ -1107,7 +1113,7 @@ const buildContributors = (
  * @param domainName the domain name of the DMP Tool
  * @param plan the Plan information retrieve from the MySQL database
  * @param project the Project information retrieve from the MySQL database
- * @param funding the Funding information retrieve from the MySQL database
+ * @param fundings the Funding information retrieve from the MySQL database
  * @param hiddenQuestionIds the ids of the BASE questions hidden by their display logic
  * @returns the DMP metadata with extensions from the DMP Tool
  */
@@ -1117,7 +1123,7 @@ const buildDMPToolExtensions = async (
   domainName: string,
   plan: LoadPlanInfo,
   project: LoadProjectInfo,
-  funding: LoadFundingInfo | undefined,
+  fundings: LoadFundingInfo[],
   hiddenQuestionIds = new Set<number>(),
 ): Promise<DMPToolExtensionType> => {
   const extensions: DMPToolExtensionType = {
@@ -1145,57 +1151,60 @@ const buildDMPToolExtensions = async (
     ? { name: project.dmptool_research_domain }
     : undefined;
 
-  let funderProject: DMPExtensionFunderProjectType | undefined = undefined;
-  let funderOpportunity: DMPExtensionFunderOpportunityType | undefined = undefined;
+  const funderProjects: DMPExtensionFunderProjectType[] = [];
+  const funderOpportunities: DMPExtensionFunderOpportunityType[] = [];
 
-  if (funding) {
+  if (Array.isArray(fundings)) {
     const projectId: RDACommonStandardIdentifierType = {
       identifier: internalIdBase(applicationName, project.id, plan.id),
       type: StandardIdentifierType.OTHER
     };
 
-    const funderId: RDACommonStandardIdentifierType = funding.uri === undefined
-      ? {
-        identifier: `${internalIdBase(applicationName, project.id, plan.id)}.fundings.${funding.id}`,
-        type: StandardIdentifierType.OTHER
+    for (const funding of fundings) {
+      // Determine the funder id
+      const funderId: RDACommonStandardIdentifierType = funding.uri === undefined
+        ? {
+          identifier: `${internalIdBase(applicationName, project.id, plan.id)}.fundings.${funding.id}`,
+          type: StandardIdentifierType.OTHER
+        }
+        : {
+          identifier: funding.uri,
+          type: funding.uri.match(ROR_REGEX)
+            ? StandardIdentifierType.ROR
+            : StandardIdentifierType.URL
+        };
+
+      // Define the Funder's project number if applicable. project_id and funder_id
+      // are used to help tie the project_identifier to the correct
+      // project[?].funding[?] in the RDA Common Standard.
+      if (funding.funderProjectNumber) {
+        funderProjects.push({
+          project_id: projectId,
+          funder_id: funderId,
+          project_identifier: {
+            identifier: funding.funderProjectNumber,
+            type: funding.funderProjectNumber?.startsWith('http')
+              ? StandardIdentifierType.URL
+              : StandardIdentifierType.OTHER
+          }
+        });
       }
-      : {
-        identifier: funding.uri,
-        type: funding.uri.match(ROR_REGEX)
-          ? StandardIdentifierType.ROR
-          : StandardIdentifierType.URL
-      };
 
-    // Define the Funder's project number if applicable. project_id and funder_id
-    // are used to help tie the project_identifier to the correct
-    // project[?].funding[?] in the RDA Common Standard.
-    if (funding.funderProjectNumber) {
-      funderProject = {
-        project_id: projectId,
-        funder_id: funderId,
-        project_identifier: {
-          identifier: funding.funderProjectNumber,
-          type: funding.funderProjectNumber?.startsWith('http')
-            ? StandardIdentifierType.URL
-            : StandardIdentifierType.OTHER
-        }
-      };
-    }
-
-    // Define the Funder's opportunity number if applicable. project_id and
-    // funder_id are used to help tie the opportunity_identifier to the correct
-    // project[?].funding[?] in the RDA Common Standard.
-    if (funding.funderOpportunityNumber) {
-      funderOpportunity = {
-        project_id: projectId,
-        funder_id: funderId,
-        opportunity_identifier: {
-          identifier: funding.funderOpportunityNumber,
-          type: funding.funderOpportunityNumber?.startsWith('http')
-            ? StandardIdentifierType.URL
-            : StandardIdentifierType.OTHER
-        }
-      };
+      // Define the Funder's opportunity number if applicable. project_id and
+      // funder_id are used to help tie the opportunity_identifier to the correct
+      // project[?].funding[?] in the RDA Common Standard.
+      if (funding.funderOpportunityNumber) {
+        funderOpportunities.push({
+          project_id: projectId,
+          funder_id: funderId,
+          opportunity_identifier: {
+            identifier: funding.funderOpportunityNumber,
+            type: funding.funderOpportunityNumber?.startsWith('http')
+              ? StandardIdentifierType.URL
+              : StandardIdentifierType.OTHER
+          }
+        });
+      }
     }
   }
 
@@ -1208,11 +1217,11 @@ const buildDMPToolExtensions = async (
   if (!isNullOrUndefined(project.dmptool_research_domain) && research_domain !== undefined) {
     extensions.research_domain = research_domain;
   }
-  if (funderProject !== undefined) {
-    extensions.funding_project = [funderProject];
+  if (funderProjects.length > 0) {
+    extensions.funding_project = funderProjects;
   }
-  if (funderOpportunity !== undefined) {
-    extensions.funding_opportunity = [funderOpportunity];
+  if (funderOpportunities.length > 0) {
+    extensions.funding_opportunity = funderOpportunities;
   }
 
   if (!isNullOrUndefined(narrative)) {
@@ -1233,55 +1242,56 @@ const buildDMPToolExtensions = async (
  * @param applicationName the name of the application/service
  * @param planId the Plan ID
  * @param project the Project information retrieve from the MySQL database
- * @param funding the Funding information retrieve from the MySQL database
+ * @param fundings the Funding information retrieve from the MySQL database
  * @returns the Project and Funding info for the RDA Common Standard
  */
 const buildProject = (
   applicationName: string,
   planId: number,
   project: LoadProjectInfo,
-  funding: LoadFundingInfo | undefined
+  fundings: LoadFundingInfo[]
 ): RDACommonStandardProject | undefined => {
   if (isNullOrUndefined(project)) {
     return undefined;
   }
 
-  let fundingObject = undefined;
+  // Filter out any funding info that has no funder name, then map the remaining
+  // funding info to the RDA Common Standard format
+  const fundingArray: RDACommonStandardFunding[] = fundings
+    .filter((funding: LoadFundingInfo): boolean => !isBlank(funding?.name))
+    .map((funding:LoadFundingInfo): RDACommonStandardFunding => {
+      const grantIdObject = funding.grantId
+        ? {
+          identifier: funding.grantId,
+          type: funding.grantId?.startsWith('http')
+            ? StandardIdentifierType.URL
+            : StandardIdentifierType.OTHER
+        }
+        : undefined;
 
-  if (funding && funding.name && funding.status) {
-    const grantIdObject = funding.grantId
-      ? {
-        identifier: funding.grantId,
-        type: funding.grantId?.startsWith('http') ? 'url' : 'other'
-      }
-      : undefined;
+      // RDA Common Standard requires the funder id to be present
+      const funderIdObject = funding.uri
+        ? {
+          identifier: funding.uri,
+          type: (funding).uri?.match(ROR_REGEX)
+            ? StandardIdentifierType.ROR
+            : StandardIdentifierType.URL
+        }
+        : {
+          identifier: `${internalIdBase(applicationName, project.id, planId)}.fundings.${funding.id}`,
+          type: StandardIdentifierType.OTHER
+        };
 
-    // RDA Common Standard requires the funder id to be present
-    const funderIdObject = funding.uri
-      ? {
-        identifier: funding.uri,
-        type: (funding).uri?.match(ROR_REGEX) ? 'ror' : 'url'
-      }
-      : {
-        identifier: `${internalIdBase(applicationName, project.id, planId)}.fundings.${funding.id}`,
-        type: 'other'
-      };
-
-    // The RDA Common Standard requires the funder name and status to be present
-    fundingObject = !isNullOrUndefined(funding)
-      ? [{
-        name: (funding).name,
-        funding_status: planFundingStatusToDMPFundingStatus((funding).status),
+      // The RDA Common Standard requires the funder name and status to be present
+      return {
+        name: (funding).name.trim(),
+        funding_status: funding.status,
         grant_id: grantIdObject,
         funder_id: funderIdObject
-      }]
-      : undefined;
+      }
+    });
 
-    if (grantIdObject !== undefined && fundingObject !== undefined) {
-      fundingObject[0].grant_id = grantIdObject;
-    }
-  }
-
+  // Return the project and funding info in the RDA Common Standard format
   return {
     title: project.title,
     description: project.abstractText ?? undefined,
@@ -1289,10 +1299,10 @@ const buildProject = (
     end: isValidDate(project.endDate ?? '') ? project.endDate : undefined,
     project_id: [{
       identifier: internalIdBase(applicationName, project.id, planId),
-      type: 'other'
+      type: StandardIdentifierType.OTHER
     }],
-    funding: fundingObject
-  }
+    funding: fundingArray.length > 0 ? fundingArray : undefined
+  };
 }
 
 // The allowed values for a Distribution's data_access in the RDA Common Standard
@@ -1469,7 +1479,7 @@ const buildDataset = (
     description: isBlank(desc?.answer) ? undefined : desc.answer,
     dataset_id: {
       identifier: `${internalIdBase(applicationName, projectId, planId)}.outputs.${rowIdx + 1}`,
-      type: 'other'
+      type: StandardIdentifierType.OTHER
     },
     personal_data: isNullOrUndefined(flags) ?
       'unknown'
@@ -1684,7 +1694,7 @@ export async function planToDMPCommonStandard(
   // entered on them) are left out of the DMP
   const hiddenQuestionIds: Set<number> = await loadHiddenQuestionIds(rdsConnectionParams, plan.id);
 
-  // Get all the funding and narrative info
+  // Get all the research output info for the plan.
   const datasets: RDACommonStandardDataset[] | [] = await loadDatasetInfo(
     rdsConnectionParams,
     applicationName,
@@ -1693,12 +1703,11 @@ export async function planToDMPCommonStandard(
     plan.languageId,
     hiddenQuestionIds
   );
-  // We only allow one funding per plan at this time
+  // Get all the funding info for the plan
   const fundings: LoadFundingInfo[] | [] = await loadFundingInfo(
     rdsConnectionParams,
     plan.id
   );
-  const funding: LoadFundingInfo | undefined = fundings.length > 0 ? fundings[0] : undefined;
   const alts: RDACommonStandardAlternateIdentifier[] | [] = await loadAlternateIdentifiersInfo(
     rdsConnectionParams,
     plan.id
@@ -1756,8 +1765,9 @@ export async function planToDMPCommonStandard(
     applicationName,
     plan.id,
     project,
-    funding
+    fundings
   );
+
   const dmpContributor: RDACommonStandardContributor[] | [] = buildContributors(
     applicationName,
     env,
@@ -1794,13 +1804,13 @@ export async function planToDMPCommonStandard(
       domainName,
       plan,
       project,
-      funding,
+      fundings,
       hiddenQuestionIds
     )
     : undefined;
 
   rdsConnectionParams.logger.debug(
-    { applicationName, domainName, planId, env, dmpId: plan.dmpId },
+    { applicationName, domainName, planId, env, dmpId: plan.dmpId, funding: dmp?.dmp?.project?.[0]?.funding, extensions },
     'Generated maDMP metadata record'
   );
 
