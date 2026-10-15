@@ -731,7 +731,9 @@ describe('planToDMPCommonStandard', () => {
       customCalls.forEach(c => expect(c[2]).toEqual(['123', '7']));
 
       const firstSection = result?.dmp?.narrative?.template?.section[0];
-      const customQuestion = firstSection?.question.find(q => q.type === 'CUSTOM');
+      const customQuestion = firstSection?.question.find((q: { type: string }) => {
+        return q.type === 'CUSTOM'
+      });
       expect(customQuestion?.id).toEqual(77);
       expect(customQuestion?.answer?.json).toEqual(mockCustomQuestion.answerJSON);
     });

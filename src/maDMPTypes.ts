@@ -131,6 +131,19 @@ export interface RDACommonStandardContributor {
   role: string[];
 }
 
+export interface RDACommonStandardFunding {
+  name: string;
+  funding_status: string;
+  grant_id?: {
+    identifier: string;
+    type: string;
+  };
+  funder_id?: {
+    identifier: string;
+    type: string;
+  }
+}
+
 export interface RDACommonStandardProject {
   title: string;
   description?: string;
@@ -140,18 +153,7 @@ export interface RDACommonStandardProject {
     identifier: string;
     type: string;
   }[]
-  funding?: {
-    name: string;
-    funding_status: string;
-    grant_id?: {
-      identifier: string;
-      type: string;
-    };
-    funder_id?: {
-      identifier: string;
-      type: string;
-    }
-  }[]
+  funding?: RDACommonStandardFunding[];
 }
 
 export interface RDACommonStandardRelatedWork {
@@ -247,6 +249,7 @@ export enum StandardIdentifierType {
   ARK = 'ark',
   DOI = 'doi',
   HANDLE = 'handle',
+  ORCID = 'orcid',
   ROR = 'ror',
   URL = 'url',
   OTHER = 'other'
