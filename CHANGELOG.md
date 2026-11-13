@@ -1,5 +1,9 @@
 # dmptool-utils CHANGELOG
 
+## v2.3.0
+- Added `loadTemplateNarrative(rdsConnectionParams, versionedTemplateId)` to load a blank published Template (no Plan or answers) with its owner, sections and questions. Questions include their `requirementText`, `guidanceText`, `sampleText`, `useSampleTextAsDefault`, `required` and question `json` (e.g. the options for option based questions). Used by the dmptool-narrative-generator to download funder templates from the Funder Requirements page
+- Added the `TemplateNarrative`, `TemplateNarrativeSection`, `TemplateNarrativeQuestion` and `TemplateNarrativeOwner` interfaces
+
 ## v2.2.3
 - Updated `maDMP` to allow for multiple `funding` entries in the `dmp.project` array
 - Fixed bug where the `funding_status` was being overwritten
