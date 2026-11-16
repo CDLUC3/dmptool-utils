@@ -121,6 +121,20 @@ export const isNullOrUndefined = (val: unknown): boolean => {
   return val === null || val === undefined;
 }
 
+
+/**
+ * Convert a MySQL TINYINT (or boolean/string) value into a boolean
+ * 'TRUE', ' true ', 'True' and '1' are all considered true, while 'FALSE', ' false ', 'False' and '0' are all considered false.
+ * Any other value will be considered false.
+ */
+export const toBoolean = (val: unknown): boolean => {
+  if (typeof val === 'string') {
+    const normalized = val.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1';
+  }
+  return val === true || val === 1;
+};
+
 /**
  * Remove null and undefined values from an object or array.
  *
@@ -196,4 +210,22 @@ export const areEqual = (a: any, b: any): boolean => {
   }
 
   return true;
+};
+
+/**
+ * Parse a MySQL JSON column value. mysql2 returns JSON columns as objects, but
+ * some drivers return them as strings, so this handles both.
+ *
+ * @param val the raw column value (an object, a JSON string, null or undefined)
+ * @returns the parsed value as type T, or undefined if the value is null, undefined
+ * or not valid JSON
+ */
+export const parseJSONColumn = <T>(val: unknown): T | undefined => {
+  if (val === null || val === undefined) return undefined;
+  if (typeof val === 'object') return val as T;
+  try {
+    return JSON.parse(String(val)) as T;
+  } catch {
+    return undefined;
+  }
 };
