@@ -106,7 +106,11 @@ const blankToUndefined = (val: unknown): string | undefined => {
 /**
  * Builds the TemplateNarrative structure from SQL_TEMPLATE_NARRATIVE rows.
  */
-const buildTemplateNarrative = (rows: any[]): TemplateNarrative => {
+const buildTemplateNarrative = (
+  rows: any[],
+  logger: ConnectionParams['logger'],
+  versionedTemplateId: number
+): TemplateNarrative => {
   const first = rows[0];
   const narrative: TemplateNarrative = {
     id: first.versionedTemplateId,
@@ -149,6 +153,14 @@ const buildTemplateNarrative = (rows: any[]): TemplateNarrative => {
 
     if (row.questionId !== null && row.questionId !== undefined) {
       const json = parseJSONColumn<AnyQuestionType>(row.questionJSON);
+
+      if (json === undefined && row.questionJSON !== null && row.questionJSON !== undefined) {
+        logger?.warn(
+          { versionedTemplateId, questionId: row.questionId },
+          'Unable to parse questionJSON for template question'
+        );
+      }
+
       section.question.push({
         id: row.questionId,
         order: row.questionOrder ?? 0,
@@ -191,5 +203,5 @@ export const loadTemplateNarrative = async (
   );
   if (!Array.isArray(rows?.results) || rows.results.length === 0) return undefined;
 
-  return buildTemplateNarrative(rows.results);
+  return buildTemplateNarrative(rows.results, rdsConnectionParams.logger, versionedTemplateId);
 };
