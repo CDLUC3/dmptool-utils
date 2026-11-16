@@ -1,5 +1,6 @@
 import { AnyQuestionType } from '@dmptool/types';
 import { ConnectionParams, queryTable } from './rds';
+import { toBoolean, parseJSONColumn } from './general';
 
 /**
  * A question on a published (versioned) Template, without any answer.
@@ -69,8 +70,7 @@ export interface TemplateNarrative {
 
 // Fetches the Template, its owner and all of its sections and questions.
 // Note that everything comes from the versioned tables (the published snapshot of the
-// Template), not the `templates` table (which has `latestPublishVisibility` instead
-// of `visibility`).
+// Template)
 const SQL_TEMPLATE_NARRATIVE = `
   SELECT vt.id versionedTemplateId, vt.templateId, vt.name templateTitle,
          vt.description templateDescription, vt.version templateVersion, vt.visibility,
@@ -91,13 +91,6 @@ const SQL_TEMPLATE_NARRATIVE = `
 `;
 
 /**
- * Convert a MySQL TINYINT (or boolean/string) value into a boolean
- */
-const toBoolean = (val: unknown): boolean => {
-  return val === true || val === 1 || val === '1' || val === 'true';
-};
-
-/**
  * Return undefined for text that is empty once HTML tags, non-breaking spaces and
  * whitespace are removed (e.g. "<p></p>" or "<p>&nbsp;</p>"). Otherwise, return the
  * trimmed text.
@@ -108,20 +101,6 @@ const blankToUndefined = (val: unknown): string | undefined => {
   const text = String(val).trim();
   const stripped = text.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, '').trim();
   return stripped.length > 0 ? text : undefined;
-};
-
-/**
- * mysql2 returns JSON columns as objects, but some drivers return them as strings.
- */
-const parseQuestionJSON = (val: unknown): AnyQuestionType | undefined => {
-  if (val === null || val === undefined) return undefined;
-  if (typeof val === 'object') return val as AnyQuestionType;
-
-  try {
-    return JSON.parse(String(val)) as AnyQuestionType;
-  } catch {
-    return undefined;
-  }
 };
 
 /**
@@ -169,7 +148,7 @@ const buildTemplateNarrative = (rows: any[]): TemplateNarrative => {
     }
 
     if (row.questionId !== null && row.questionId !== undefined) {
-      const json = parseQuestionJSON(row.questionJSON);
+      const json = parseJSONColumn<AnyQuestionType>(row.questionJSON);
       section.question.push({
         id: row.questionId,
         order: row.questionOrder ?? 0,
@@ -191,8 +170,9 @@ const buildTemplateNarrative = (rows: any[]): TemplateNarrative => {
  * Loads a versioned Template along with all of its sections and questions. This is
  * the blank Template (no Plan or answers) and it does not include any customizations.
  *
- * The caller is responsible for deciding whether the Template can be shown to the
- * current user (e.g. check `active`, `versionType` and `visibility`).
+ * This function does not filter by `active`, `versionType` or `visibility`. Those
+ * values are returned on the narrative so the caller can check them before showing
+ * the Template to the current user.
  *
  * @param rdsConnectionParams the connection parameters for the MySQL database
  * @param versionedTemplateId the versionedTemplates.id to load

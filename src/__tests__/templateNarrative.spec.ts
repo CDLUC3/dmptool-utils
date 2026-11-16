@@ -51,7 +51,7 @@ describe('loadTemplateNarrative', () => {
     jest.clearAllMocks();
   });
 
-  it('returns undefined when the template does not exist', async () => {
+  it('should return undefined when the template does not exist', async () => {
     (queryTable as jest.Mock).mockResolvedValueOnce({ results: [], fields: [] });
 
     const result = await loadTemplateNarrative(mockConfig, 999);
@@ -59,14 +59,14 @@ describe('loadTemplateNarrative', () => {
     expect(queryTable).toHaveBeenCalledWith(mockConfig, expect.stringContaining('FROM versionedTemplates vt'), ['999']);
   });
 
-  it('returns undefined when the query fails', async () => {
+  it('should return undefined when the query fails', async () => {
     (queryTable as jest.Mock).mockResolvedValueOnce(undefined);
 
     const result = await loadTemplateNarrative(mockConfig, 10);
     expect(result).toBeUndefined();
   });
 
-  it('returns the template with no sections when it has none', async () => {
+  it('should return the template with no sections when it has none', async () => {
     (queryTable as jest.Mock).mockResolvedValueOnce({
       results: [{ ...baseRow, sectionId: null, questionId: null }],
       fields: [],
@@ -94,7 +94,7 @@ describe('loadTemplateNarrative', () => {
     });
   });
 
-  it('builds the sections and questions in order', async () => {
+  it('should build the sections and questions in order', async () => {
     (queryTable as jest.Mock).mockResolvedValueOnce({
       results: [
         {
@@ -192,7 +192,7 @@ describe('loadTemplateNarrative', () => {
     expect(second?.question).toEqual([]);
   });
 
-  it('leaves the type and json undefined when the question JSON is invalid', async () => {
+  it('should leave the type and json undefined when the question JSON is invalid', async () => {
     (queryTable as jest.Mock).mockResolvedValueOnce({
       results: [{
         ...baseRow,
